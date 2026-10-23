@@ -13,6 +13,7 @@
 - 云服务绑定新应用 `wbapp_5TAJvvE8eVrSjSP13oJroH`，AI 面板恢复可用，线上实测通过
 - 版本号纳入统一管理：页面徽标、文档、讲义落款都跟随 `APP_VERSION` 自动更新
 - 新增 `tools/version.js`（版本同步）、`tools/make-qrcode.py`（二维码）、`tools/smoke-ai.js`（线上 AI 冒烟）
+- 新增 `tools/release.js` 与 `releases/` 快照目录：每次发版固化「单文件 + git tag」，可回溯到任意历史版本（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0 已补齐）
 
 ## [1.4.0] — 2026-10-23
 

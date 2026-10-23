@@ -16,7 +16,7 @@
 
 ---
 
-## 2. 四条命令
+## 2. 五条命令
 
 ```bash
 # 本地预览（改完刷新即可）
@@ -31,6 +31,9 @@ node tools/sync-doc.js --embed
 # 版本号：查看一致性 / 递增（自动同步 index.html + 使用说明 + HANDOVER + CHANGELOG + 帮助面板）
 node tools/version.js
 node tools/version.js --bump minor
+
+# 发版：查版本一致性 → 跑回归 → 存快照 → 提交 → 打 tag
+node tools/release.js
 ```
 
 线上 AI 冒烟（改过 AI 相关代码才需要）：
@@ -66,6 +69,42 @@ node tools/version.js --set 2.0.0              # 直接指定
 **版本号漂移会被测试拦住**：`tests/run-tests.js` 第 10 节断言 6 条 —— `APP_VERSION` 格式、CHANGELOG 顶部条目、使用说明、HANDOVER、页面徽标渲染结果、内嵌 help-md 全部一致。改了版本却漏同步某处 → 测试红。
 
 > 坑：`APP_VERSION` 在页头第一个 `<script>` 里，不在 `id="app-js"` 内，测试只抽 app-js，所以 `run-tests.js` 会先把它注入 `global.APP_VERSION` 再 require，否则 `renderVersion()` 报 `not defined`。
+
+---
+
+## 2.6 版本回溯（回滚）
+
+**平台侧没有“版本列表 / 一键回滚”**，发布永远是覆盖同一个应用。所以回滚只有一条路：**把旧版代码重新发布一次**，链接和二维码都不变，线上内容退回那一版。
+
+可回溯的东西有两套，互为备份：
+
+| 资产 | 位置 | 用途 |
+|---|---|---|
+| git tag | `v1.0.0` `v1.4.0` `v1.4.1` `v1.5.0` … | 代码级回溯，`git show <tag>:index.html` 精确取出 |
+| 单文件快照 | `releases/v1.5.0.html` 等 | 直接拷给学生 / 拷 U 盘 / 存档，不依赖 git |
+
+```bash
+# 看有哪些版本
+node tools/release.js --list
+
+# 回滚到 v1.4.0（先备份当前？当前版已由 v1.5.0 快照与 tag 覆盖，不必另存）
+git show v1.4.0:index.html > index.html
+node tests/run-tests.js          # 确认该版本自身是好的（应为 157 项全过）
+# 然后让助手发布一次
+```
+
+发版流程（顺序不能颠倒）：
+
+```bash
+node tools/version.js --bump minor --note "新增 xxx"   # 1. 定版本
+# 2. 写完 CHANGELOG 的条目、跑通测试
+node tools/release.js                                  # 3. 快照 + tag
+# 4. 让助手发布 → 链接不变
+```
+
+`release.js` 有三道闸门：版本号四处不一致 → 停；测试有失败 → 停；**工作区不干净 → 停**（版本快照必须对应一个确定提交，不能把半成品封成版本）。
+
+> 注意：`v1.4.0` / `v1.4.1` / `v1.0.0` 三个快照是从 git 历史导出的，行尾被仓库规范成 LF，比当时实际发布的文件小 ~900 字节，**内容等价**，浏览器无感。`v1.5.0` 起的快照直接拷贝工作区文件，与线上逐字节一致（858,871 字节）。
 
 ---
 
@@ -287,9 +326,11 @@ fanc-milling-app/
 │  ├─ img/               11 张截图（panel-*.png）
 │  └─ history/           历史工作日志
 ├─ tests/run-tests.js    163 项断言，Node 直接跑，无需浏览器
+├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
 │  ├─ version.js         版本号查一致性 / 递增 / 同步
+│  ├─ release.js         发版：检查 + 快照 + tag（三道闸门）
 │  ├─ make-qrcode.py     生成发布链接二维码卡片
 │  └─ smoke-ai.js        线上 AI 模块冒烟（CDP 驱动无头 Edge）
 └─ .git                  提交 63a00fa（首版）/ v1.4 / v1.5.0
