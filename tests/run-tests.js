@@ -11,6 +11,12 @@ const appMatch = html.match(/<script id="app-js">([\s\S]*?)<\/script>/);
 if (!appMatch) { console.error('index.html 中找不到 <script id="app-js">'); process.exit(1); }
 const js = appMatch[1];
 
+// 版本号唯一数据源在页头的第一个 script 里（不在 app-js 内），抽取后注入全局，
+// 让 renderVersion() 在桩环境也能跑，同时供第 10 节做一致性断言。
+const verMatch = html.match(/const APP_VERSION = "(\d+\.\d+\.\d+)";/);
+const APP_VER = verMatch ? verMatch[1] : null;
+global.APP_VERSION = APP_VER;
+
 function El(){
   return {
     value: '', textContent: '', innerHTML: '', className: '', disabled: false,
@@ -302,6 +308,23 @@ M.TEMPLATES.forEach(t=>{
   const errs = r.issues.filter(x=>x.lv==='error');
   ok('模板「'+t.t+'」0 错误', errs.length === 0, errs);
 });
+
+console.log('--- 10. 版本号一致性 ---');
+const readDoc = (rel) => {
+  try { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); } catch(e) { return ''; }
+};
+const verIn = (src, re) => { const m = re.exec(src); return m ? m[1] : null; };
+ok('APP_VERSION 存在且为 x.y.z', !!APP_VER, APP_VER);
+ok('CHANGELOG 顶部条目与 APP_VERSION 一致',
+   verIn(readDoc('CHANGELOG.md'), /^## \[(\d+\.\d+\.\d+)\]/m) === APP_VER);
+ok('使用说明.md 版本与 APP_VERSION 一致',
+   verIn(readDoc('docs/使用说明.md'), /> 版本 v(\d+\.\d+\.\d+)/) === APP_VER);
+ok('HANDOVER.md 代码版本与 APP_VERSION 一致',
+   verIn(readDoc('HANDOVER.md'), /代码版本：v(\d+\.\d+\.\d+)/) === APP_VER);
+ok('页面徽标跟随 APP_VERSION',
+   store['app-ver'] && store['app-ver'].textContent === 'v' + APP_VER, store['app-ver'] && store['app-ver'].textContent);
+ok('应用内帮助的 md 块同一版本',
+   new RegExp('> 版本 v' + String(APP_VER).replace(/\./g, '\\.')).test(html));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

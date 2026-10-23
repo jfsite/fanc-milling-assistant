@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-23 23:45　｜　代码版本：v1.4（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+> 最后更新：2026-10-23 23:58　｜　代码版本：v1.5.0（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
 
 ---
 
@@ -16,21 +16,56 @@
 
 ---
 
-## 2. 三条命令
+## 2. 四条命令
 
 ```bash
 # 本地预览（改完刷新即可）
 python -m http.server 8765 --bind 127.0.0.1
 
-# 回归测试：157 项断言，必须 0 失败才算完成
+# 回归测试：163 项断言，必须 0 失败才算完成
 node tests/run-tests.js
 
 # 改完文档 / 换完截图后，把内容写回 index.html 的帮助面板
 node tools/sync-doc.js --embed
 
-# 线上 AI 模块冒烟（无头 Edge 在发布域名下跑真实调用，改过 AI 相关代码才需要）
+# 版本号：查看一致性 / 递增（自动同步 index.html + 使用说明 + HANDOVER + CHANGELOG + 帮助面板）
+node tools/version.js
+node tools/version.js --bump minor
+```
+
+线上 AI 冒烟（改过 AI 相关代码才需要）：
+
+```bash
 node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI"
 ```
+
+---
+
+## 2.5 版本号：单一数据源 + 自动同步
+
+**唯一能手改的地方**：`index.html` 第 10 行 `const APP_VERSION = "1.5.0";`
+
+页面徽标（`#app-ver`）、标签页标题、导出讲义落款都在运行时从它取；文档侧由脚本写：
+
+| 位置 | 写法 | 谁写 |
+|---|---|---|
+| `index.html` | `const APP_VERSION = "x.y.z"` | **手改（唯一源）** |
+| `docs/使用说明.md` | `> 版本 vx.y.z ｜ …` | `version --bump` |
+| `HANDOVER.md` | `代码版本：vx.y.z` | `version --bump` |
+| `CHANGELOG.md` | `## [x.y.z] — 日期` | `version --bump`（插入空条目，内容手补） |
+| `help-md` 内嵌块 | 同 `docs/使用说明.md` | `version --bump` 自动跑 `sync-doc --embed` |
+
+递增规则：`major` 大改 / `minor` 加功能块（新面板）/ `patch` 修 bug 改文案。
+
+```bash
+node tools/version.js                          # 查一致性，不一致退码 1
+node tools/version.js --bump patch --note "修复 xx"   # 递增并在 CHANGELOG 记一行
+node tools/version.js --set 2.0.0              # 直接指定
+```
+
+**版本号漂移会被测试拦住**：`tests/run-tests.js` 第 10 节断言 6 条 —— `APP_VERSION` 格式、CHANGELOG 顶部条目、使用说明、HANDOVER、页面徽标渲染结果、内嵌 help-md 全部一致。改了版本却漏同步某处 → 测试红。
+
+> 坑：`APP_VERSION` 在页头第一个 `<script>` 里，不在 `id="app-js"` 内，测试只抽 app-js，所以 `run-tests.js` 会先把它注入 `global.APP_VERSION` 再 require，否则 `renderVersion()` 报 `not defined`。
 
 ---
 
@@ -92,7 +127,7 @@ node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OT
 2. 加 `<section class="panel" id="panel-xxx">`（放在 AI 面板之前）
 3. 需要样式就加到 `<style>` 末尾
 4. 在 `// ===== 初始化 =====` 之前写逻辑与按钮接线
-5. 加测试到 `tests/run-tests.js`，跑通 157 项
+5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 163 项）
 6. 更新 `docs/使用说明.md` 并 `node tools/sync-doc.js --embed`
 
 ---
@@ -109,7 +144,7 @@ node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OT
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：157 项，0 失败。
+7. **测试全绿才算完成**：163 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 
 ---
@@ -127,6 +162,20 @@ node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OT
 | 二维码 | `qrcode.png` 已重生成（492×630），编码带 sharecode 的完整链接 |
 
 **注意：链接必须带 `?sharecode=OTD3JQJQPI`**，裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 返回 403。
+
+### 与旧版切割核对（2026-10-23 复核，全部通过）
+
+| 检查点 | 结果 |
+|---|---|
+| `index.html` 里旧域名 / 旧 appId / 旧 key | **0 处**（`grep -c` 为 0） |
+| `index.html` 出现的 `workbuddy` 域名 | 只有 2 个：新发布域名 + 统一 OAuth Relay |
+| `tools/` `tests/` 里旧标识 | 0 处 |
+| `.workbuddy/applications.yaml` | 只登记 `wbapp_5TAJvvE8eVrSjSP13oJroH` |
+| `.wbapp_*.genie` | 只有新应用一个 marker，`localDir` 指向本目录 |
+| `qrcode.png` | 与新链接的二维码图形**像素级一致**，与旧链接图形差异 6.4 万像素 |
+| `docs/history/` 里的旧域名 / 旧 appId | 保留（历史档案，**不参与运行**，别当残留删掉） |
+| 旧工作区 `D:\WorkBuddy\对话\fanc-milling-app` | 仍在磁盘上，是独立旧副本；已不再使用，建议归档（不要在此发布） |
+| 旧线上链接 `fanuc-milling-assistant…` | 属另一账号，无法下线，仍是 10-13 旧版；已从所有入口移除 |
 
 发布命令（在本目录新任务里执行即可）：
 
@@ -230,23 +279,27 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 fanc-milling-app/
 ├─ index.html            858 KB，应用本体（10 面板 + 内嵌文档 + 11 图）
 ├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
+├─ CHANGELOG.md          版本更新日志（tools/version.js 维护）
+├─ HANDOVER.md           本文
 ├─ .wbapp_5TAJvvE8….genie 发布标记（appId / localDir / entryHtml，勿删）
 ├─ docs/
 │  ├─ 使用说明.md         918 行，文档唯一手改处
 │  ├─ img/               11 张截图（panel-*.png）
 │  └─ history/           历史工作日志
-├─ tests/run-tests.js    157 项断言，Node 直接跑，无需浏览器
+├─ tests/run-tests.js    163 项断言，Node 直接跑，无需浏览器
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
+│  ├─ version.js         版本号查一致性 / 递增 / 同步
 │  ├─ make-qrcode.py     生成发布链接二维码卡片
 │  └─ smoke-ai.js        线上 AI 模块冒烟（CDP 驱动无头 Edge）
-└─ .git                  提交 63a00fa（首版）+ v1.4 还原点
+└─ .git                  提交 63a00fa（首版）/ v1.4 / v1.5.0
 ```
 
 ---
 
 ## 10. 历史档案
 
+- `CHANGELOG.md` —— 面向使用者的版本变更记录（v1.0 → 当前），发版前看一眼有没有漏记
 - `docs/history/2026-10-13.md` —— 教材蒸馏成 skill 包、首版应用发布、云服务开通与 AI 面板接入
 - `docs/history/2026-10-23.md` —— 纳入 git、v1.1 五项补齐、v1.2 教师侧能力、刀补偏置 bug、v1.3 联动/尺寸/找错、v1.4 帮助面板、两次发布受阻、**第三次换新工作区发布成功**
 

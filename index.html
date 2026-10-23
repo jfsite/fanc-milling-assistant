@@ -6,6 +6,8 @@
 <title>FANUC 铣削编程助手（W版）</title>
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
+  // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
+  const APP_VERSION = "1.5.0";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -167,7 +169,7 @@
       <div class="sub">写 / 改 / 解释 / 校验程序 · 查 G/M 代码 · 算切削参数 · 基于《数控铣削编程与加工(FANUC系统)》</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <span class="badge">v1.0</span>
+      <span class="badge" id="app-ver" title="版本号">v—</span>
       <button class="ghost" id="btn-present" style="padding:6px 14px;font-size:13px">大屏</button>
     </div>
   </header>
@@ -542,7 +544,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.4 ｜ 形态：单文件 HTML（`index.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.5.0 ｜ 形态：单文件 HTML（`index.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -3317,7 +3319,7 @@ function exportHandout(){
     + 'ul{padding-left:22px;font-size:13px}'
     + '@media print{body{padding:0}pre{white-space:pre-wrap}}</style></head><body>'
     + '<h1>FANUC 铣削程序讲义</h1>'
-    + '<p style="color:#6b7280;font-size:13px">生成时间：'+new Date().toLocaleString('zh-CN')+'</p>'
+    + '<p style="color:#6b7280;font-size:13px">生成时间：'+new Date().toLocaleString('zh-CN')+'　·　版本 v'+APP_VERSION+'</p>'
     + '<h2>一、程序原文</h2><pre>'+esc(txt)+'</pre>'
     + '<h2>二、刀轨示意</h2>'+(img ? '<img src="'+img+'" alt="刀轨">' : '<p>（未取到图像）</p>')
     + '<h2>三、路径统计</h2>'+stat
@@ -3821,6 +3823,14 @@ document.getElementById('nav').addEventListener('click', e=>{
 });
 
 // ===== 初始化 =====
+function renderVersion(){
+  const el = document.getElementById('app-ver');
+  if(el){ el.textContent = 'v' + APP_VERSION; el.title = '版本 v' + APP_VERSION; }
+  if(typeof document.title === 'string' && document.title.indexOf('· v') === -1){
+    document.title += ' · v' + APP_VERSION;
+  }
+}
+renderVersion();
 renderTable();
 restoreAll();
 renderCodeList();
