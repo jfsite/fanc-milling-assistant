@@ -27,6 +27,9 @@ node tests/run-tests.js
 
 # 改完文档 / 换完截图后，把内容写回 index.html 的帮助面板
 node tools/sync-doc.js --embed
+
+# 线上 AI 模块冒烟（无头 Edge 在发布域名下跑真实调用，改过 AI 相关代码才需要）
+node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI"
 ```
 
 ---
@@ -120,7 +123,7 @@ node tools/sync-doc.js --embed
 | 工作区 | `D:\WorkBuddy\fanc-milling-app`（新目录，无历史应用登记） |
 | 分享链接 | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
 | 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
-| 线上内容 | 858,235 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版）」 |
+| 线上内容 | 858,355 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版）」 |
 | 二维码 | `qrcode.png` 已重生成（492×630），编码带 sharecode 的完整链接 |
 
 **注意：链接必须带 `?sharecode=OTD3JQJQPI`**，裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 返回 403。
@@ -148,18 +151,42 @@ workbuddy_sites_deploy
 
 旧链接 `https://fanuc-milling-assistant.app.workbuddy.host` 仍是 10 月 13 日旧版（27,786 字节，5 个面板），已废弃。
 
-### AI 面板的遗留问题
+### AI 面板：已修复（云服务已绑定新域名）
 
-**云端密钥绑定旧域名**：`index.html` 里
+`index.html` 第 9–13 行的 `__CLOUD_CONFIG__` 已换成本应用自己的云服务配置：
 
 ```js
 const __CLOUD_CONFIG__ = {
-  endpoint: "https://fanuc-milling-assistant.app.workbuddy.host",
-  publishableKey: "wbpk_..."
+  endpoint: "https://fanuc-milling-w.app.workbuddy.host",
+  oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
+  publishableKey: "wbpk_5TAJvvE8eVrSjSP13oJroH_..."
 };
 ```
 
-新域名 `fanuc-milling-w.app.workbuddy.host` 与该密钥不匹配，AI 模块（面板 9）**大概率提示鉴权失败**，其余 9 个模块纯本地运算不受影响，界面上已有黄色提示。真要修：用 `cloud-service` 为 `wbapp_5TAJvvE8eVrSjSP13oJroH` 开通云服务，取新 `publishableKey` 后替换 `index.html` 第 9–13 行，再发布一次。
+云服务环境：`wbcs_iQq6E9QTTnajqDSOG25Mzd`（`billingStatus=normal`、`provisionStatus=assigned`），与本应用共用同一 identity。
+
+**线上已实测通过**（`tools/smoke-ai.js`，无头 Edge 在发布域名下跑真实调用）：
+
+```
+{ ok: true, model: "auto", modelCount: 34, frames: 57, text: "收到" }
+```
+
+密钥按 **Origin 精确匹配**，所以只有在该发布域名下才鉴权通过；`file://` 或本地 `http://127.0.0.1:8765` 打开时 AI 面板仍会失败，属正常（其余 9 个模块不受影响）。改代码后想复验：
+
+```bash
+node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI"
+```
+
+偶发上游 `HTTP 525`（网关握手失败）是瞬时的，重跑即可。
+
+<details>
+<summary>历史记录：修复前的旧配置（仅存档）</summary>
+
+```js
+endpoint: "https://fanuc-milling-assistant.app.workbuddy.host",
+publishableKey: "wbpk_MgjnWjuikhj17T9RBXsxU8_..."
+```
+</details>
 
 二维码生成（脚本已固化，`qrcode` + `Pillow` 装在 `C:/Users/wzp/.workbuddy/binaries/python/versions/3.13.12`）：
 
@@ -211,7 +238,8 @@ fanc-milling-app/
 ├─ tests/run-tests.js    157 项断言，Node 直接跑，无需浏览器
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
-│  └─ make-qrcode.py     生成发布链接二维码卡片
+│  ├─ make-qrcode.py     生成发布链接二维码卡片
+│  └─ smoke-ai.js        线上 AI 模块冒烟（CDP 驱动无头 Edge）
 └─ .git                  提交 63a00fa（首版）+ v1.4 还原点
 ```
 

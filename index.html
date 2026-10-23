@@ -7,9 +7,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   const __CLOUD_CONFIG__ = {
-    endpoint: "https://fanuc-milling-assistant.app.workbuddy.host",
+    endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
-    publishableKey: "wbpk_MgjnWjuikhj17T9RBXsxU8_ynMwKOI3wtORZGHp4tzkEvO2LKBDjKnT"
+    publishableKey: "wbpk_5TAJvvE8eVrSjSP13oJroH_4STtS8u428ah7qB2Ex7jAiI7QKBhK3hY"
   };
 </script>
 <style>
@@ -484,7 +484,7 @@
     <div class="card">
       <h2>AI 生成 FANUC 程序</h2>
       <p class="hint" style="margin-bottom:12px">用自然语言描述加工需求，AI 生成 FANUC 铣削程序（云端大模型，无需自带 API Key）</p>
-      <p class="hint" style="margin-bottom:12px;color:var(--warn)">本模块依赖云端授权，密钥与原发布域名绑定。若通过更换后的分享链接访问时提示鉴权失败，属预期情况；其余 9 个模块全部为本地运算，断网可用。</p>
+      <p class="hint" style="margin-bottom:12px;color:var(--warn)">本模块需联网并依赖云端授权：只在本应用的发布链接下可用，直接双击本地文件（file://）打开时不可用；其余 9 个模块全部为本地运算，断网可用。</p>
       <div class="row" style="margin-bottom:12px">
         <div class="field"><label>加工类型</label>
           <select id="ai-type">
@@ -1287,11 +1287,11 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 
 ### 10.6 限制
 
-- 需要联网，且依赖云端服务可用性与配额。机房断网时该模块不可用（其他 8 个模块全部离线可用）。
+- 需要联网，且依赖云端服务可用性与配额。机房断网时该模块不可用（其他 9 个模块全部离线可用）。
 - 生成结果**未经几何验证**，必须过一遍校验器和刀轨演示。
 - 不支持多工序、多刀具的完整工艺方案，只生成单段程序。
 - 用 `file://` 直接双击打开时，鉴权可能失败（Origin 为 null）。此时请用本地服务方式打开（见 0. 快速开始）。
-- 云端密钥与原发布域名绑定。**更换分享链接后**该模块可能提示鉴权失败，属预期情况；其余 9 个模块为纯本地运算，断网也能用。
+- 云端密钥与当前发布域名绑定（`https://fanuc-milling-w.app.workbuddy.host`）。通过**本应用官方分享链接**访问时该模块正常；换到别的域名或直接用 `file://` 打开则会提示鉴权失败，属预期情况。其余 9 个模块为纯本地运算，断网也能用。
 
 ---
 
