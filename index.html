@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANUC 铣削编程助手</title>
+<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script>
+  const __CLOUD_CONFIG__ = {
+    endpoint: "https://fanuc-milling-assistant.app.workbuddy.host",
+    oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
+    publishableKey: "wbpk_MgjnWjuikhj17T9RBXsxU8_ynMwKOI3wtORZGHp4tzkEvO2LKBDjKnT"
+  };
+</script>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --line:#e5e7eb; --line2:#d1d5db;
+    --txt:#1f2328; --sub:#6b7280; --brand:#185fa5; --brand-bg:#e6f1fb;
+    --accent:#0f6e56; --accent-bg:#e1f5ee; --warn:#854f0b; --warn-bg:#faeeda;
+    --danger:#a32d2d; --danger-bg:#fcebeb; --mono:"Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--txt);font-size:14px;line-height:1.6}
+  .wrap{max-width:1200px;margin:0 auto;padding:20px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:20px}
+  header h1{font-size:20px;font-weight:600}
+  header .sub{color:var(--sub);font-size:13px;margin-top:2px}
+  .badge{background:var(--brand-bg);color:var(--brand);font-size:12px;padding:2px 10px;border-radius:12px;font-weight:500}
+  nav{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}
+  nav button{border:1px solid var(--line);background:var(--card);color:var(--txt);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px;transition:.15s}
+  nav button:hover{border-color:var(--brand);color:var(--brand)}
+  nav button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .panel{display:none}
+  .panel.active{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:16px;font-weight:600;margin-bottom:12px}
+  .card h3{font-size:14px;font-weight:600;margin-bottom:8px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  input,select,textarea{border:1px solid var(--line2);border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;width:100%;background:#fff}
+  textarea{font-family:var(--mono);font-size:13px;resize:vertical;min-height:180px}
+  label{font-size:13px;color:var(--sub);display:block;margin-bottom:4px}
+  .field{margin-bottom:12px;flex:1;min-width:160px}
+  button.primary{background:var(--brand);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500}
+  button.primary:hover{opacity:.92}
+  button.ghost{background:var(--card);border:1px solid var(--line2);color:var(--txt);padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px}
+  button.ghost:hover{border-color:var(--brand);color:var(--brand)}
+  .result{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:16px;font-family:var(--mono);font-size:13px;white-space:pre-wrap;margin-top:12px;line-height:1.7;overflow-x:auto}
+  .hint{font-size:12px;color:var(--sub);margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{background:#fafbfc;color:var(--sub);font-weight:500;position:sticky;top:0}
+  tr:hover td{background:#fafbfc}
+  code{font-family:var(--mono);background:var(--brand-bg);color:var(--brand);padding:1px 6px;border-radius:4px;font-size:12px}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;margin-left:6px;font-weight:500}
+  .tag.modal{background:var(--accent-bg);color:var(--accent)}
+  .tag.nonmodal{background:var(--warn-bg);color:var(--warn)}
+  .searchbox{display:flex;gap:8px;margin-bottom:12px}
+  .searchbox input{flex:1}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .chips button{border:1px solid var(--line);background:var(--card);padding:4px 12px;border-radius:16px;cursor:pointer;font-size:13px}
+  .chips button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .metric{background:#fafbfc;border-radius:8px;padding:12px;text-align:center}
+  .metric .v{font-size:22px;font-weight:600;color:var(--brand)}
+  .metric .k{font-size:12px;color:var(--sub)}
+  .tpl-item{border:1px solid var(--line);border-radius:8px;padding:12px;cursor:pointer;transition:.15s}
+  .tpl-item:hover{border-color:var(--brand);background:var(--brand-bg)}
+  .tpl-item .t{font-weight:500;margin-bottom:4px}
+  .tpl-item .d{font-size:12px;color:var(--sub)}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:800px){.two-col{grid-template-columns:1fr}}
+  .notice{background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>FANUC 铣削编程助手</h1>
+      <div class="sub">写 / 改 / 解释程序 · 查 G/M 代码 · 算切削参数 · 基于《数控铣削编程与加工(FANUC系统)》</div>
+    </div>
+    <span class="badge">v1.0</span>
+  </header>
+
+  <nav id="nav">
+    <button data-p="gcode" class="active">G/M 代码速查</button>
+    <button data-p="template">程序骨架</button>
+    <button data-p="calc">参数计算</button>
+    <button data-p="explain">程序解释</button>
+    <button data-p="ai">AI 生成程序</button>
+  </nav>
+
+  <div class="notice" style="display:none" id="notice"></div>
+
+  <!-- G/M 代码速查 -->
+  <section class="panel active" id="panel-gcode">
+    <div class="card">
+      <h2>G/M 代码速查</h2>
+      <div class="searchbox">
+        <input id="gcode-search" placeholder="搜索代码或功能，如：G41 / 钻孔 / 补偿 / 圆弧">
+      </div>
+      <div class="chips" id="gcode-chips">
+        <button class="active" data-f="all">全部</button>
+        <button data-f="G">G 代码</button>
+        <button data-f="M">M 代码</button>
+        <button data-f="modal">模态</button>
+        <button data-f="nonmodal">非模态</button>
+        <button data-f="cut">切削/插补</button>
+        <button data-f="comp">补偿</button>
+        <button data-f="coord">坐标系</button>
+        <button data-f="cycle">固定循环</button>
+        <button data-f="spindle">主轴/冷却</button>
+      </div>
+      <div style="max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">
+        <table id="gcode-table">
+          <thead><tr><th style="width:70px">代码</th><th>功能</th><th style="width:70px">组</th><th style="width:80px">性质</th><th>典型用法</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 程序骨架 -->
+  <section class="panel" id="panel-template">
+    <div class="card">
+      <h2>程序骨架模板</h2>
+      <p class="hint" style="margin-bottom:12px">点击模板加载到下方编辑器，再按需修改</p>
+      <div class="grid" id="tpl-list" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div>
+    </div>
+    <div class="card">
+      <h2>程序编辑器</h2>
+      <div class="row">
+        <button class="ghost" id="btn-insert-header">插入程序头</button>
+        <button class="ghost" id="btn-insert-tail">插入程序尾</button>
+        <button class="ghost" id="btn-clear">清空</button>
+      </div>
+      <textarea id="editor" style="margin-top:12px" placeholder="在此编写或粘贴 FANUC 程序..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="btn-explain-editor">解释这段程序</button>
+        <button class="ghost" id="btn-copy">复制程序</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 参数计算 -->
+  <section class="panel" id="panel-calc">
+    <div class="card">
+      <h2>切削参数计算</h2>
+      <div class="row" style="margin-bottom:16px">
+        <div class="field"><label>切削速度 Vc (m/min)</label><input id="c-vc" type="number" value="100"></div>
+        <div class="field"><label>刀具直径 D (mm)</label><input id="c-d" type="number" value="10"></div>
+        <div class="field"><label>每齿进给 fz (mm/z)</label><input id="c-fz" type="number" step="0.01" value="0.05"></div>
+        <div class="field"><label>齿数 z</label><input id="c-z" type="number" value="4"></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btn-calc">计算转速与进给</button>
+      </div>
+      <div class="grid" style="margin-top:16px">
+        <div class="metric"><div class="k">主轴转速 n</div><div class="v" id="r-n">—</div></div>
+        <div class="metric"><div class="k">进给速度 F</div><div class="v" id="r-f">—</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>材料推荐切削速度</h2>
+      <table>
+        <thead><tr><th>材料</th><th>硬质合金 Vc (m/min)</th><th>高速钢 Vc (m/min)</th></tr></thead>
+        <tbody>
+          <tr><td>铝合金</td><td>150 ~ 300</td><td>60 ~ 120</td></tr>
+          <tr><td>45 钢 / 碳钢</td><td>80 ~ 150</td><td>20 ~ 35</td></tr>
+          <tr><td>合金钢</td><td>60 ~ 120</td><td>15 ~ 30</td></tr>
+          <tr><td>不锈钢</td><td>40 ~ 80</td><td>10 ~ 20</td></tr>
+          <tr><td>铸铁</td><td>60 ~ 120</td><td>15 ~ 25</td></tr>
+          <tr><td>铜合金</td><td>100 ~ 200</td><td>40 ~ 80</td></tr>
+        </tbody>
+      </table>
+      <p class="hint">孔加工：钻孔 Vc 15~30、铰孔 5~10、攻螺纹 3~8（进给=螺距）</p>
+    </div>
+  </section>
+
+  <!-- 程序解释 -->
+  <section class="panel" id="panel-explain">
+    <div class="card">
+      <h2>程序解释</h2>
+      <p class="hint" style="margin-bottom:12px">粘贴 FANUC 程序，逐行解释每个指令的含义</p>
+      <textarea id="explain-input" placeholder="粘贴程序，如：&#10;O0001;&#10;G21 G90 G17 G40 G49 G80;&#10;G54 G00 X0 Y0;&#10;M06 T01;&#10;G43 H01 Z50 M03 S3000;"></textarea>
+      <div style="margin-top:12px">
+        <button class="primary" id="btn-explain">逐行解释</button>
+      </div>
+      <div class="result" id="explain-result" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- AI 生成程序 -->
+  <section class="panel" id="panel-ai">
+    <div class="card">
+      <h2>AI 生成 FANUC 程序</h2>
+      <p class="hint" style="margin-bottom:12px">用自然语言描述加工需求，AI 生成 FANUC 铣削程序（云端大模型，无需自带 API Key）</p>
+      <div class="row" style="margin-bottom:12px">
+        <div class="field"><label>加工类型</label>
+          <select id="ai-type">
+            <option value="平面铣削">平面铣削</option>
+            <option value="外轮廓">外轮廓</option>
+            <option value="内轮廓">内轮廓</option>
+            <option value="孔加工">孔加工</option>
+            <option value="槽加工">槽加工</option>
+          </select>
+        </div>
+        <div class="field"><label>工件材料</label>
+          <select id="ai-material">
+            <option value="铝合金">铝合金</option>
+            <option value="45钢">45 钢</option>
+            <option value="合金钢">合金钢</option>
+            <option value="不锈钢">不锈钢</option>
+            <option value="铸铁">铸铁</option>
+          </select>
+        </div>
+        <div class="field"><label>刀具直径 (mm)</label><input id="ai-d" type="number" value="10"></div>
+      </div>
+      <div class="field" style="margin-bottom:12px"><label>补充要求（可选）</label>
+        <input id="ai-req" placeholder="例如：零件尺寸 50×50，铣深 2mm，用子程序">
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <button class="primary" id="btn-ai-generate">生成程序</button>
+        <button class="ghost" id="btn-ai-stop" style="display:none">停止生成</button>
+        <span id="ai-status" class="hint" style="align-self:center"></span>
+      </div>
+      <div class="result" id="ai-result" style="display:none"></div>
+      <div class="row" id="ai-actions" style="display:none;margin-top:12px">
+        <button class="ghost" id="btn-ai-to-editor">载入编辑器</button>
+        <button class="ghost" id="btn-ai-explain">解释这段程序</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ===== G/M 代码数据 =====
+const GCODES = [
+  {c:"G00",g:"01",m:1,f:"快速定位",cat:"cut",use:"G00 X_ Y_；非切削移动，注意安全高度"},
+  {c:"G01",g:"01",m:1,f:"直线插补",cat:"cut",use:"G01 X_ Y_ F_；切削进给"},
+  {c:"G02",g:"01",m:1,f:"顺时针圆弧插补",cat:"cut",use:"G02 X_ Y_ R_ 或 I_ J_"},
+  {c:"G03",g:"01",m:1,f:"逆时针圆弧插补",cat:"cut",use:"G03 X_ Y_ R_ 或 I_ J_"},
+  {c:"G04",g:"00",m:0,f:"暂停",cat:"cut",use:"G04 X2.0（秒）或 P2000（毫秒）"},
+  {c:"G17",g:"02",m:1,f:"XY 平面选择",cat:"coord",use:"默认平面"},
+  {c:"G18",g:"02",m:1,f:"ZX 平面选择",cat:"coord",use:"侧铣"},
+  {c:"G19",g:"02",m:1,f:"YZ 平面选择",cat:"coord",use:"侧铣"},
+  {c:"G20",g:"06",m:1,f:"英制输入",cat:"coord",use:"国内少用"},
+  {c:"G21",g:"06",m:1,f:"公制输入",cat:"coord",use:"国内默认"},
+  {c:"G28",g:"00",m:0,f:"返回参考点",cat:"coord",use:"G91 G28 Z0 回 Z 轴原点"},
+  {c:"G40",g:"07",m:1,f:"刀具半径补偿取消",cat:"comp",use:"与 G41/G42 成对"},
+  {c:"G41",g:"07",m:1,f:"刀具半径左补偿",cat:"comp",use:"顺铣常用，需 D 号"},
+  {c:"G42",g:"07",m:1,f:"刀具半径右补偿",cat:"comp",use:"逆铣常用，需 D 号"},
+  {c:"G43",g:"08",m:1,f:"刀具长度正补偿",cat:"comp",use:"G43 H01 Z_"},
+  {c:"G44",g:"08",m:1,f:"刀具长度负补偿",cat:"comp",use:"少用"},
+  {c:"G49",g:"08",m:1,f:"刀具长度补偿取消",cat:"comp",use:"初始化必加"},
+  {c:"G50.1",g:"22",m:1,f:"镜像取消",cat:"coord",use:"与 G51.1 成对"},
+  {c:"G51.1",g:"22",m:1,f:"可编程镜像",cat:"coord",use:"G51.1 X0 以 X=0 为对称轴"},
+  {c:"G52",g:"00",m:0,f:"局部坐标系设定",cat:"coord",use:"G52 X_ Y_ 平移；G52 X0 Y0 取消"},
+  {c:"G54",g:"14",m:1,f:"工件坐标系 1",cat:"coord",use:"对刀设定"},
+  {c:"G55",g:"14",m:1,f:"工件坐标系 2",cat:"coord",use:""},
+  {c:"G56",g:"14",m:1,f:"工件坐标系 3",cat:"coord",use:""},
+  {c:"G57",g:"14",m:1,f:"工件坐标系 4",cat:"coord",use:""},
+  {c:"G58",g:"14",m:1,f:"工件坐标系 5",cat:"coord",use:""},
+  {c:"G59",g:"14",m:1,f:"工件坐标系 6",cat:"coord",use:""},
+  {c:"G68",g:"16",m:1,f:"坐标旋转",cat:"coord",use:"G68 X_ Y_ R_（中心+角度）"},
+  {c:"G69",g:"16",m:1,f:"坐标旋转取消",cat:"coord",use:"与 G68 成对"},
+  {c:"G80",g:"09",m:1,f:"固定循环取消",cat:"cycle",use:"初始化必加"},
+  {c:"G81",g:"09",m:1,f:"钻孔循环",cat:"cycle",use:"G81 X_ Y_ Z_ R_ F_"},
+  {c:"G82",g:"09",m:1,f:"钻孔循环（孔底暂停）",cat:"cycle",use:"锪孔/钻沉孔"},
+  {c:"G83",g:"09",m:1,f:"深孔啄钻循环",cat:"cycle",use:"排屑，深孔用"},
+  {c:"G84",g:"09",m:1,f:"攻螺纹循环",cat:"cycle",use:"主轴正转+转速匹配"},
+  {c:"G85",g:"09",m:1,f:"镗孔循环",cat:"cycle",use:"进给进退"},
+  {c:"G86",g:"09",m:1,f:"镗孔循环（停主轴）",cat:"cycle",use:""},
+  {c:"G90",g:"03",m:1,f:"绝对编程",cat:"coord",use:"默认"},
+  {c:"G91",g:"03",m:1,f:"增量编程",cat:"coord",use:"常用于回参考点"},
+  {c:"G98",g:"10",m:1,f:"固定循环返回初始平面",cat:"cycle",use:"安全"},
+  {c:"G99",g:"10",m:1,f:"固定循环返回 R 平面",cat:"cycle",use:"节省时间，注意碰撞"},
+];
+const MCODES = [
+  {c:"M00",g:"—",m:0,f:"程序停止",cat:"spindle",use:"按循环启动继续"},
+  {c:"M01",g:"—",m:0,f:"选择停止",cat:"spindle",use:"需面板开关打开"},
+  {c:"M02",g:"—",m:0,f:"程序结束",cat:"spindle",use:"不回程序头"},
+  {c:"M03",g:"—",m:0,f:"主轴正转",cat:"spindle",use:"M03 S_"},
+  {c:"M04",g:"—",m:0,f:"主轴反转",cat:"spindle",use:""},
+  {c:"M05",g:"—",m:0,f:"主轴停止",cat:"spindle",use:""},
+  {c:"M06",g:"—",m:0,f:"换刀",cat:"spindle",use:"M06 T_"},
+  {c:"M08",g:"—",m:0,f:"冷却液开",cat:"spindle",use:""},
+  {c:"M09",g:"—",m:0,f:"冷却液关",cat:"spindle",use:""},
+  {c:"M30",g:"—",m:0,f:"程序结束并复位",cat:"spindle",use:"回到程序头，最常用"},
+  {c:"M98",g:"—",m:0,f:"调用子程序",cat:"spindle",use:"M98 P____"},
+  {c:"M99",g:"—",m:0,f:"子程序结束返回",cat:"spindle",use:""},
+];
+const ALL = [...GCODES, ...MCODES];
+
+// ===== 程序骨架模板 =====
+const TEMPLATES = [
+  {t:"通用程序骨架", d:"标准初始化 + 单刀结构", code:`O0001;\nG21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S3000;\nG00 X_ Y_;\nZ5;\nG01 Z-2 F100;\n... 加工内容 ...\nG00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;`},
+  {t:"带刀补轮廓程序", d:"G41 左刀补建立与取消", code:`O0002;\nG21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S2500;\nG00 X-20 Y-20;\nZ5;\nG01 Z-3 F150;\nG41 D01 X0 Y0 F300;\nY50;\nX50;\nY0;\nX0;\nG40 X-20 Y-20;\nG00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;`},
+  {t:"子程序结构", d:"M98 调用 / M99 返回", code:`O1000;\nG21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S2000;\nG00 X0 Y0;\nZ5;\nM98 P2000;\nG00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;\n\nO2000;\nG01 Z-2 F150;\nG01 X40 F300;\nY40;\nX0;\nY0;\nM99;`},
+  {t:"孔加工固定循环", d:"G81 钻孔循环", code:`O0003;\nG21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S800;\nG00 X10 Y10;\nZ5;\nG81 X10 Y10 Z-5 R2 F100;\nX30 Y10;\nX50 Y10;\nG80;\nG00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;`},
+  {t:"坐标旋转", d:"G68 旋转 / G69 取消", code:`G68 X0 Y0 R45;\n... 加工 ...\nG69;`},
+  {t:"镜像加工", d:"G51.1 镜像 / G50.1 取消", code:`G51.1 X0;\n... 加工 ...\nG50.1;`},
+];
+
+// ===== 程序解释字典 =====
+const EXPLAIN = {};
+ALL.forEach(x => EXPLAIN[x.c] = {f:x.f, use:x.use, cat:x.cat});
+
+// ===== 导航 =====
+const nav = document.getElementById('nav');
+nav.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+b.dataset.p).classList.add('active');
+});
+
+// ===== G/M 代码表格 =====
+let curFilter = 'all', curSearch = '';
+function renderTable(){
+  const tb = document.querySelector('#gcode-table tbody');
+  let list = ALL.filter(x => {
+    if(curFilter==='all') return true;
+    if(curFilter==='G') return x.c.startsWith('G');
+    if(curFilter==='M') return x.c.startsWith('M');
+    if(curFilter==='modal') return x.m===1;
+    if(curFilter==='nonmodal') return x.m===0;
+    return x.cat===curFilter;
+  });
+  if(curSearch){
+    const s = curSearch.toLowerCase();
+    list = list.filter(x => x.c.toLowerCase().includes(s) || x.f.includes(curSearch) || (x.use||'').includes(curSearch));
+  }
+  tb.innerHTML = list.map(x => `
+    <tr>
+      <td><code>${x.c}</code></td>
+      <td>${x.f}</td>
+      <td>${x.g}</td>
+      <td>${x.m ? '<span class="tag modal">模态</span>' : '<span class="tag nonmodal">非模态</span>'}</td>
+      <td style="font-family:var(--mono);font-size:12px">${x.use||''}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--sub)">无匹配结果</td></tr>';
+}
+document.getElementById('gcode-chips').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#gcode-chips button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); curFilter = b.dataset.f; renderTable();
+});
+document.getElementById('gcode-search').addEventListener('input', e => { curSearch = e.target.value; renderTable(); });
+
+// ===== 模板 =====
+const tplList = document.getElementById('tpl-list');
+TEMPLATES.forEach(t => {
+  const div = document.createElement('div');
+  div.className = 'tpl-item';
+  div.innerHTML = `<div class="t">${t.t}</div><div class="d">${t.d}</div>`;
+  div.onclick = () => { document.getElementById('editor').value = t.code; switchPanel('template'); };
+  tplList.appendChild(div);
+});
+
+// ===== 编辑器 =====
+function switchPanel(p){
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelector('nav button[data-p="'+p+'"]').classList.add('active');
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  document.getElementById('panel-'+p).classList.add('active');
+}
+const HEADER = 'G21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S3000;';
+const TAIL = 'G00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;';
+document.getElementById('btn-insert-header').onclick = () => { const e=document.getElementById('editor'); e.value = HEADER + '\n' + e.value; };
+document.getElementById('btn-insert-tail').onclick = () => { const e=document.getElementById('editor'); e.value = e.value.trim() + '\n' + TAIL; };
+document.getElementById('btn-clear').onclick = () => { document.getElementById('editor').value=''; };
+document.getElementById('btn-copy').onclick = () => {
+  const e=document.getElementById('editor');
+  navigator.clipboard.writeText(e.value).then(()=>showNotice('已复制到剪贴板'));
+};
+document.getElementById('btn-explain-editor').onclick = () => {
+  document.getElementById('explain-input').value = document.getElementById('editor').value;
+  switchPanel('explain'); runExplain();
+};
+
+// ===== 参数计算 =====
+document.getElementById('btn-calc').onclick = () => {
+  const vc=+document.getElementById('c-vc').value, d=+document.getElementById('c-d').value,
+        fz=+document.getElementById('c-fz').value, z=+document.getElementById('c-z').value;
+  if(!vc||!d||!fz||!z){ showNotice('请填写完整参数'); return; }
+  const n = 1000*vc/(Math.PI*d), f = n*fz*z;
+  document.getElementById('r-n').textContent = Math.round(n) + ' r/min';
+  document.getElementById('r-f').textContent = Math.round(f) + ' mm/min';
+};
+
+// ===== 程序解释 =====
+function explainLine(line){
+  line = line.trim();
+  if(!line) return '';
+  const num = line.split(';')[0].split('；')[0];
+  const words = (num.match(/[GM]\d+(?:\.\d+)?/g)||[]);
+  const parts = [];
+  words.forEach(w => {
+    if(EXPLAIN[w]) parts.push(`<b>${w}</b> ${EXPLAIN[w].f}`);
+  });
+  if(!parts.length) return `<span style="color:#64748b">${line}</span>`;
+  return `<span style="color:#7dd3fc">${line}</span>　→　${parts.join('；')}`;
+}
+function runExplain(){
+  const input = document.getElementById('explain-input').value;
+  const lines = input.split('\n');
+  const out = lines.map(explainLine).filter(x=>x).join('\n');
+  const r = document.getElementById('explain-result');
+  r.style.display = 'block';
+  r.innerHTML = out || '（空，请粘贴程序）';
+}
+document.getElementById('btn-explain').onclick = runExplain;
+
+// ===== 通知 =====
+let noticeTimer;
+function showNotice(msg){
+  const n = document.getElementById('notice');
+  n.textContent = msg; n.style.display = 'block';
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(()=>n.style.display='none', 2000);
+}
+
+// ===== AI 生成程序（云服务 LLM） =====
+let cloud = null, aiAbort = null;
+function initCloud(){
+  if(!window.WorkBuddyCloud){ return null; }
+  if(cloud) return cloud;
+  try{
+    cloud = window.WorkBuddyCloud.createWorkBuddyCloud({
+      endpoint: __CLOUD_CONFIG__.endpoint,
+      oauthRelayBaseUrl: __CLOUD_CONFIG__.oauthRelayBaseUrl,
+      publishableKey: __CLOUD_CONFIG__.publishableKey,
+    });
+  }catch(e){
+    cloud = null;
+  }
+  return cloud;
+}
+
+const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。';
+
+async function aiGenerate(){
+  const c = initCloud();
+  if(!c){ showNotice('云服务未就绪，请刷新页面重试'); return; }
+  const resultEl = document.getElementById('ai-result');
+  const statusEl = document.getElementById('ai-status');
+  const stopBtn = document.getElementById('btn-ai-stop');
+  const genBtn = document.getElementById('btn-ai-generate');
+  resultEl.style.display = 'block';
+  resultEl.textContent = '正在准备...';
+  statusEl.textContent = '';
+  genBtn.disabled = true;
+  // 动态获取可用模型（空列表显式处理，不写死兜底）
+  let modelId;
+  try{
+    const models = await c.llm.models.list();
+    const usable = models.find(m => m.disabled !== true);
+    if(!models.length || !usable){
+      resultEl.textContent = '当前没有可用的 AI 模型，请稍后再试或联系管理员。';
+      genBtn.disabled = false;
+      return;
+    }
+    modelId = usable.id;
+  }catch(e){
+    resultEl.textContent = '获取模型列表失败，请稍后重试。';
+    genBtn.disabled = false;
+    return;
+  }
+  const type = document.getElementById('ai-type').value;
+  const material = document.getElementById('ai-material').value;
+  const dia = document.getElementById('ai-d').value;
+  const req = document.getElementById('ai-req').value.trim();
+  const prompt = `加工类型：${type}；工件材料：${material}；刀具直径：${dia}mm；${req ? '补充要求：'+req : ''}。请生成完整的 FANUC 铣削程序。`;
+  resultEl.textContent = '正在生成...';
+  stopBtn.style.display = '';
+  aiAbort = new AbortController();
+  let content = '';
+  try{
+    for await (const chunk of c.llm.chat.completions.create({
+      model: modelId,
+      messages: [
+        { role: 'system', content: AI_SYSTEM },
+        { role: 'user', content: prompt },
+      ],
+      stream: true,
+      signal: aiAbort.signal,
+    })){
+      const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+      if(delta && delta.content){ content += delta.content; resultEl.textContent = content; }
+    }
+    if(content){
+      document.getElementById('ai-actions').style.display = 'flex';
+    }
+  }catch(err){
+    if(err && err.name === 'AbortError'){
+      resultEl.textContent = content || '（已停止生成）';
+    }else{
+      const code = err && err.error && err.error.code;
+      let msg = '生成失败，请稍后重试';
+      if(code && code.indexOf('quota_')===0) msg = '云服务额度不足或限流，请稍后重试';
+      else if(code && code.indexOf('auth_')===0) msg = '云服务鉴权失败（Origin 不匹配）';
+      else if(code && (code.indexOf('gateway_')===0 || code.indexOf('model_')===0)) msg = '模型服务暂时不可用，请重试';
+      resultEl.textContent = msg;
+      statusEl.textContent = '';
+    }
+  }finally{
+    genBtn.disabled = false;
+    stopBtn.style.display = 'none';
+    aiAbort = null;
+  }
+}
+document.getElementById('btn-ai-generate').onclick = aiGenerate;
+document.getElementById('btn-ai-stop').onclick = () => { if(aiAbort) aiAbort.abort(); };
+document.getElementById('btn-ai-to-editor').onclick = () => {
+  document.getElementById('editor').value = document.getElementById('ai-result').textContent;
+  switchPanel('template');
+};
+document.getElementById('btn-ai-explain').onclick = () => {
+  document.getElementById('explain-input').value = document.getElementById('ai-result').textContent;
+  switchPanel('explain'); runExplain();
+};
+
+// ===== 初始化 =====
+renderTable();
+</script>
+</body>
+</html>
