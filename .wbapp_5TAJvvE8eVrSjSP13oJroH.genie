@@ -1,0 +1,5 @@
+appId: wbapp_5TAJvvE8eVrSjSP13oJroH
+name: FANUC铣削编程助手
+localDir: D:\WorkBuddy\fanc-milling-app
+appType: web
+entryHtml: index.html

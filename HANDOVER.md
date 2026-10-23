@@ -1,0 +1,225 @@
+# 交接说明 HANDOVER
+
+> 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
+>
+> 最后更新：2026-10-23 23:45　｜　代码版本：v1.4（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+
+---
+
+## 1. 这是什么
+
+《数控铣削编程与加工（FANUC系统）》配套的教学工具，面向江苏联合职业技术学院惠山中专办学点 522142 / 522143 班。
+
+- **形态**：单个 `index.html`，零构建、零依赖，双击即用（仅「AI 生成程序」需要联网）
+- **用途**：教师上课演示、作业批量批改、学生自查与练习
+- **自包含**：说明文档与 11 张截图都以 base64 内嵌，拷一个文件到任何电脑都能完整使用
+
+---
+
+## 2. 三条命令
+
+```bash
+# 本地预览（改完刷新即可）
+python -m http.server 8765 --bind 127.0.0.1
+
+# 回归测试：157 项断言，必须 0 失败才算完成
+node tests/run-tests.js
+
+# 改完文档 / 换完截图后，把内容写回 index.html 的帮助面板
+node tools/sync-doc.js --embed
+```
+
+---
+
+## 3. 现状：10 个面板
+
+| # | 面板 | 职责 | 主要实现 |
+|---|---|---|---|
+| 1 | G/M 代码速查 | 51 条指令（39 G + 12 M），搜索 + 10 个筛选标签 | `GCODES` `MCODES` `renderTable()` |
+| 2 | 程序骨架 | 6 个模板 + 编辑器（插入头尾 / 复制 / 解释） | `TEMPLATES` `HEADER` `TAIL` |
+| 3 | 参数计算 | n / F / Q / Pc / Pm，材料联动，超转速折算 | `MATERIALS` `doCalc()` `calcSyncVc()` |
+| 4 | 程序解释 | 逐行翻译，地址字按上下文释义，宏语句单列 | `tokenize()` `describeAddr()` `explainMacro()` `runExplain()` |
+| 5 | 程序校验 | 43 条规则（21 E / 16 W / 6 I）+ 宏程序试算器 | `lintProgram()` `RULE_DOC` `issuesHtml()` `runMacro()` |
+| 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `contourBBox()` `checkDims()` |
+| 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV | `runBatch()` `maxDeviation()` `drawCompare()` `exportCSV()` |
+| 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
+| 9 | AI 生成程序 | 云端 LLM 流式生成 | `initCloud()` `aiGenerate()` |
+| 10 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
+
+跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`。
+
+---
+
+## 4. 代码结构
+
+`index.html` 里按顺序有三个脚本块，**顺序不能乱**：
+
+```html
+<script type="application/json" id="help-img">{...}</script>   <!-- 11 张图的 base64，由 sync-doc 生成 -->
+<script type="text/markdown"  id="help-md">...</script>        <!-- 说明正文，由 sync-doc 生成 -->
+<script id="app-js"> ... </script>                             <!-- 主脚本 -->
+```
+
+主脚本内部分区（从上到下）：
+
+```
+数据层        GCODES / MCODES / ALL / TEMPLATES / EXPLAIN
+导航与表格    nav 监听 / renderTable
+编辑器与模板
+参数计算      MATERIALS / doCalc / calcSyncVc
+解释          esc / gname / mname / stripComments / tokenize / describeAddr / explainMacro
+宏求值        mLex / mEval / fmtv
+校验          lintProgram / RULE_DOC / issuesHtml / renderLint
+宏试算        runMacro / renderMacro
+存储          LSK / lsGet / lsSet / autosave / restoreAll / applyToEditor
+刀轨引擎      parseProgramUnits / arcSweep / arcCenterByR / buildPath / segPoints / compRuns
+刀轨渲染      fitView / distToSeg / canvasCtx / drawPath / setCur / genPath
+批量          splitBySep / sampleCutPoints / maxDeviation / runBatch / renderBatch / exportCSV
+讲义          download / exportHandout
+大屏          togglePresent
+联动与尺寸    renderCodeList / highlightCodeLine / contourBBox / measuredDims / checkDims
+找错          MUTATIONS / shuffled / makeTrain / genTrain / showTrainAnswer
+帮助          helpInline / helpCols / helpIsBlock / renderHelp
+初始化        renderTable(); restoreAll(); renderCodeList();
+```
+
+### 加一个新面板的步骤
+
+1. `<nav>` 里加 `<button data-p="xxx">名称</button>`
+2. 加 `<section class="panel" id="panel-xxx">`（放在 AI 面板之前）
+3. 需要样式就加到 `<style>` 末尾
+4. 在 `// ===== 初始化 =====` 之前写逻辑与按钮接线
+5. 加测试到 `tests/run-tests.js`，跑通 157 项
+6. 更新 `docs/使用说明.md` 并 `node tools/sync-doc.js --embed`
+
+---
+
+## 5. 必须守住的约定
+
+这些是踩过坑之后定下来的，改动前先看：
+
+1. **文档单一数据源**：`docs/使用说明.md` 是唯一手改的地方，`index.html` 里的 `help-md` / `help-img` 块由 `sync-doc --embed` 生成，**不要手改那两个 script 块**。
+2. **刀补偏置是示意，不是仿真**：偏移按段自身法向 + 拐点角平分线；**建立刀补那一段的起点保持编程点**；**G40 段不做偏置**（所以橙线与蓝线角点差一个刀半径是正常的）。界面上必须保留「示意」字样。
+3. **包围盒有两种口径**，不要混：
+   - 指标卡「包围盒（含进刀）」= `res.bbox`，所有轨迹
+   - 尺寸核对用「轮廓闭环」= `contourBBox()`，**自动排除 G01 进刀**；无闭环才回退 `bboxCut`
+4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
+5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
+6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
+7. **测试全绿才算完成**：157 项，0 失败。
+8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
+
+---
+
+## 6. 发布状态（已解决，2026-10-23）
+
+**已发布上线**，走的是之前判定可行的「路径 B 新工作区」。
+
+| 项 | 值 |
+|---|---|
+| 工作区 | `D:\WorkBuddy\fanc-milling-app`（新目录，无历史应用登记） |
+| 分享链接 | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
+| 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
+| 线上内容 | 858,235 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版）」 |
+| 二维码 | `qrcode.png` 已重生成（492×630），编码带 sharecode 的完整链接 |
+
+**注意：链接必须带 `?sharecode=OTD3JQJQPI`**，裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 返回 403。
+
+发布命令（在本目录新任务里执行即可）：
+
+```
+workbuddy_sites_deploy
+  directory = D:\WorkBuddy\fanc-milling-app
+  language  = static
+  entryHtml = index.html
+  appName   = FANUC铣削编程助手
+  domainPrefix = fanuc-milling-w
+```
+
+以后再改内容，**只在本目录发布一次即可**（同一目录 → 同一应用 → 链接不变）。
+
+### 历史：为什么旧目录发不出去（存档，别再试）
+
+- 旧目录 `D:\WorkBuddy\对话\fanc-milling-app` 绑定的应用 `wbapp_MgjnWjuikhj17T9RBXsxU8` 属于**另一个账号**
+- 发布返回 `SITES_ACCOUNT_MISMATCH`（`retryable: false`），上传前就被拦下
+- **试过且无效**：改 `appName`、改 `domainPrefix`、把目录改名到新路径（仍返回同一个 appId）
+- 原因：绑定跟着**工作区**走，记录在 `D:\WorkBuddy\对话\.workbuddy\applications.yaml`，与目录路径无关
+- 结论已验证：把项目**拷到新目录 + 在该目录新建任务**，才能创建本账号的新应用。旧目录不要再试。
+
+旧链接 `https://fanuc-milling-assistant.app.workbuddy.host` 仍是 10 月 13 日旧版（27,786 字节，5 个面板），已废弃。
+
+### AI 面板的遗留问题
+
+**云端密钥绑定旧域名**：`index.html` 里
+
+```js
+const __CLOUD_CONFIG__ = {
+  endpoint: "https://fanuc-milling-assistant.app.workbuddy.host",
+  publishableKey: "wbpk_..."
+};
+```
+
+新域名 `fanuc-milling-w.app.workbuddy.host` 与该密钥不匹配，AI 模块（面板 9）**大概率提示鉴权失败**，其余 9 个模块纯本地运算不受影响，界面上已有黄色提示。真要修：用 `cloud-service` 为 `wbapp_5TAJvvE8eVrSjSP13oJroH` 开通云服务，取新 `publishableKey` 后替换 `index.html` 第 9–13 行，再发布一次。
+
+二维码生成（脚本已固化，`qrcode` + `Pillow` 装在 `C:/Users/wzp/.workbuddy/binaries/python/versions/3.13.12`）：
+
+```bash
+python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI"
+# → qrcode.png 492x630，二维码 + 标题 + 折行网址
+```
+
+---
+
+## 7. 待办（按性价比排序）
+
+| 优先级 | 项 | 说明 | 难度 |
+|---|---|---|---|
+| 高 | 题库 + 自动判分 | 按知识点出题，学生交程序自动判分定位；题目内容需手写 20~30 道 | 中（难在内容） |
+| 高 | 刀具库 | T 号 / 直径 / 刃数 / 半径补偿值，与刀补、参数、刀轨联动，替掉现在手填刀半径 | 中 |
+| 中 | 2D 材料去除 | 毛坯矩形减扫掠区域，看过切/欠切 | 中高 |
+| 中 | 宏程序 → 普通 G 代码展开 | 逐行展开结果，讲宏程序最直观 | 中高 |
+| 中 | G68 旋转作用于轨迹 | 现在只解释文字，图形不转 | 中 |
+| 低 | 按真实进给回放 | 时间轴 + 倍速，配合已有工时估算 | 中 |
+| 低 | 一键生成课堂幻灯 | 每页代码 + 刀轨 + 要点，导出 HTML/PPTX | 中 |
+
+---
+
+## 8. 会重复踩的坑
+
+| 坑 | 表现 | 正确做法 |
+|---|---|---|
+| 往 HTML 注入探针 | `html.replace('</body>', ...)` 会命中 `exportHandout` 字符串里的 `</body>`，把脚本插进 JS 字面量中间 → `Invalid or unexpected token` | 用 `rpartition('</body>')` 从末尾插 |
+| 提取主脚本 | 按「最大的内联 script」取会被 659 KB 的图片 JSON 抢走 | 按 `id="app-js"` 取 |
+| 直出 base64 | 11 张原图 725 KB → base64 后接近 1 MB | 先 Pillow 缩到 1000px、128 色量化（降到 494 KB） |
+| 改名目录 | `mv` 报 `Device or resource busy` | 先停掉占用目录的 `http.server`（TaskStop） |
+| 找错练习注入 | 变异匹配到程序头的初始化 `G40/G49/G80` 会造出假错误 | 变异正则用行首匹配 `^\s*G40\b` |
+| 圆弧整圆 | 终点=起点被「零位移」判断跳过 | 仅当无 I/J 时才跳过 |
+
+---
+
+## 9. 文件清单
+
+```
+fanc-milling-app/
+├─ index.html            858 KB，应用本体（10 面板 + 内嵌文档 + 11 图）
+├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
+├─ .wbapp_5TAJvvE8….genie 发布标记（appId / localDir / entryHtml，勿删）
+├─ docs/
+│  ├─ 使用说明.md         918 行，文档唯一手改处
+│  ├─ img/               11 张截图（panel-*.png）
+│  └─ history/           历史工作日志
+├─ tests/run-tests.js    157 项断言，Node 直接跑，无需浏览器
+├─ tools/
+│  ├─ sync-doc.js        文档 ↔ 应用双向同步
+│  └─ make-qrcode.py     生成发布链接二维码卡片
+└─ .git                  提交 63a00fa（首版）+ v1.4 还原点
+```
+
+---
+
+## 10. 历史档案
+
+- `docs/history/2026-10-13.md` —— 教材蒸馏成 skill 包、首版应用发布、云服务开通与 AI 面板接入
+- `docs/history/2026-10-23.md` —— 纳入 git、v1.1 五项补齐、v1.2 教师侧能力、刀补偏置 bug、v1.3 联动/尺寸/找错、v1.4 帮助面板、两次发布受阻、**第三次换新工作区发布成功**
+
+这两份是原始日志的副本，按时间倒序读也行，按主题跳读也行。新任务里如果要回忆某个决策的细节，优先查这两份，比翻对话快。
