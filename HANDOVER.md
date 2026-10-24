@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-23 23:58　｜　代码版本：v1.9.2（`app.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+> 最后更新：2026-10-24 21:59　｜　代码版本：v1.9.2（`app.html` 1.29 MB / 1,320,614 字节，10 个面板，249 项断言）　｜　**已发布上线**（见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
 
 ---
 
@@ -21,7 +21,7 @@
 | 文件 | 大小 | 会不会变 | 作用 |
 |---|---|---|---|
 | `index.html` | 1 KB | **永不变** | 入口：把 `?sharecode=…` 原样转给 `app.html` |
-| `app.html` | ~940 KB | 每次发版都变 | 应用本体 |
+| `app.html` | ~1.3 MB | 每次发版都变 | 应用本体 |
 
 原因：平台边缘缓存按**完整 URL** 长期缓存，根路径一旦缓住旧副本，重新发布也刷不掉（实测 `EO-Cache-Status: HIT`、`Age` 上千秒仍在命中，`Cache-Control: no-cache` 也不被遵守）。
 把「会变的东西」挪到 `app.html` 后，入口那 1 KB 即使被缓存旧了也无害（它本来就只做转发），链接永远不用换。
@@ -409,7 +409,7 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 
 ```
 fanc-milling-app/
-├─ app.html            ~940 KB，应用本体（10 面板 + 内嵌文档 + 11 图）
+├─ app.html            1.3 MB，应用本体（10 面板 + 内嵌文档 + 12 图）
 ├─ index.html          1 KB 入口转发层（永不变，别往里加东西）
 ├─ version.json        当前线上版本，应用用它做版本自检
 ├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
