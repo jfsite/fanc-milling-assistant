@@ -478,6 +478,7 @@ ok('断口不补线：0.3mm 也判为开口', psW.closed === false && psW.open =
    {closed:psW.closed, open:psW.open, gaps:psW.gaps});
 ok('断口处另起子路径', (psW.svg.match(/M/g) || []).length === 2, psW.svg.slice(0, 160));
 ok('断口后切成 2 段', psW.fragments.length === 2, psW.fragments.map(f=>f.length));
+ok('断口位置被记录（用于刀轨标红）', psW.gapMarks.length === 1 && near(psW.gapMarks[0].x, 80, 1e-6) && near(psW.gapMarks[0].d, 0.3, 1e-3), psW.gapMarks);
 ok('断口 → IR 全是开放轮廓',
    M.dwgOpenIR(psW).contours.length === 2 && M.dwgOpenIR(psW).contours.every(c=>c.open === true));
 

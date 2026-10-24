@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.9.0";
+  const APP_VERSION = "1.9.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -628,7 +628,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.9.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.9.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1478,7 +1478,8 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 - 每个断口处**另起一段**，两段各自独立加工；
 - 段与段之间一定是 **`G00 Z安全高度` → `G00 X Y` → `G01 Z切深`**，绝不会贴着工件表面横穿；
 - 程序注释标出 `(CONTOUR 1 OUTER OPEN PASS 1/3 Z-1)`，`OPEN` 就是"这一段是开口的"；
-- 界面上把断口列成**注意**而不是错误：`轮廓有 1 处断开（# 2 段后 3mm）`，不阻断生成。
+- 界面上把断口列成**注意**而不是错误：`轮廓有 1 处断开（# 2 段后 3mm）`，不阻断生成；
+- **刀轨图上用红圈标出每个断口**并标注缺口大小（如 `1. 3.0mm`），右下角有图例说明，对着图纸一眼就能找到。
 
 开口段的引刀/退刀沿第一段/末段方向延长一个 `刀半径+2mm`，和闭合轮廓的引刀逻辑一致。
 
@@ -4875,7 +4876,10 @@ function dwgPrimsToSvg(rawPrims, opt){
     used[best] = true;
     const nx = flip ? dwgPrimFlip(items[best]) : items[best];
     nx.gap = +bestD.toFixed(3);
-    if(bestD > tol) gaps.push({at:chain.length, gap:nx.gap});
+    if(bestD > 1e-4){
+      const sp = dwgPrimPt(nx, 0);
+      gaps.push({at:chain.length, gap:nx.gap, ax:end[0], ay:end[1], bx:sp[0], by:sp[1]});
+    }
     chain.push(nx);
     cur = nx;
   }
@@ -4962,6 +4966,9 @@ function dwgPrimsToSvg(rawPrims, opt){
     ok: true, svg: svg, prims: chain.concat(circles),
     gaps: gaps, welded: welded, breaks: breaks, maxGap: +maxGap.toFixed(3), fragments: fragments,
     origin: [bb.minX, bb.minY],
+    gapMarks: gaps.map(g=>({x:+((g.ax + g.bx)/2 - bb.minX).toFixed(3),
+                            y:+((g.ay + g.by)/2 - bb.minY).toFixed(3),
+                            d:g.gap})),
     closeGap: +closeGap.toFixed(3),
     open: hasBreak,
     closed: !hasBreak,
@@ -5132,7 +5139,7 @@ function dwgRenderSummary(){
     + '<div class="s"><b>' + cs.length + '</b><span>轮廓（内 ' + inner + '）</span></div>'
     + '<div class="s"><b>' + hs.length + '</b><span>圆孔</span></div>'
     + '<div class="s"><b>' + (prims.length ? (prims.length + ' / 弧 ' + arcs) : '—') + '</b><span>图元 / 圆弧</span></div>'
-    + '<div class="s"><b>' + (DWG.kind === 'svg' ? '—' : (st.closed ? '闭合' : '未闭合')) + '</b><span>轮廓闭合</span></div>'
+    + '<div class="s"><b>' + (DWG.kind === 'svg' ? '—' : (st.closed ? '闭合' : ((DWG.gapMarks || []).length + ' 处断口'))) + '</b><span>轮廓连续性</span></div>'
     + '</div>'
     + '<p class="hint">来源：' + src + (DWG.name ? '　·　' + esc(DWG.name) : '') + '</p>';
 
@@ -5241,8 +5248,23 @@ function dwgDrawPath(res){
       ctx.fill();
     });
   }
+  // 断口：红圈 + 缺口尺寸，方便对着图纸找
+  const gm = (DWG && DWG.gapMarks) || [];
+  gm.forEach((g, i)=>{
+    const px = view.X(g.x), py = view.Y(g.y);
+    ctx.beginPath(); ctx.arc(px, py, 9, 0, 2*Math.PI);
+    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py, 2.5, 0, 2*Math.PI); ctx.fillStyle = '#dc2626'; ctx.fill();
+    ctx.font = '11px Consolas,monospace'; ctx.fillStyle = '#dc2626';
+    ctx.fillText((i+1) + '. ' + g.d.toFixed(1) + 'mm', px + 12, py - 8);
+  });
+
   ctx.fillStyle = '#64748b'; ctx.font = '12px -apple-system,"Microsoft YaHei",sans-serif';
   ctx.fillText('X ' + (bb.maxX-bb.minX).toFixed(1) + ' × Y ' + (bb.maxY-bb.minY).toFixed(1) + ' mm', w-160, 18);
+  if(gm.length){
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText('红圈 = 断口（' + gm.length + ' 处）', 12, hgt - 10);
+  }
 }
 
 function dwgRenderOut(){
@@ -5433,6 +5455,7 @@ async function dwgHandleFile(file){
       DWG.svg = ps.svg;
       DWG.dims = v.dims || [];
       DWG.stats = {closed: ps.closed, closeGap: ps.closeGap, gaps: ps.gaps.length, size: ps.size};
+      DWG.gapMarks = ps.gapMarks || [];
       DWG.checks = checks;
       DWG.ir = r.ir;
       DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
@@ -5572,6 +5595,7 @@ function dwgRecompose(prims, opt){
   DWG.prims = ps.prims;
   DWG.svg = ps.svg;
   DWG.stats = {closed:ps.closed, closeGap:ps.closeGap, gaps:(ps.gaps||[]).length, size:ps.size};
+  DWG.gapMarks = ps.gapMarks || [];
   DWG.checks = checks;
   DWG.ir = r.ir;
   DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
