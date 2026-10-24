@@ -211,12 +211,24 @@ node tools/release.js                                  # 3. 快照 + tag
 | 项 | 值 |
 |---|---|
 | 工作区 | `D:\WorkBuddy\fanc-milling-app`（新目录，无历史应用登记） |
-| 分享链接 | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
+| 分享链接（对外分发用这个） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI&v=1.6.0` |
+| 裸链接（会命中旧缓存，别发） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
 | 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
-| 线上内容 | 858,355 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版）」 |
-| 二维码 | `qrcode.png` 已重生成（492×630），编码带 sharecode 的完整链接 |
+| 线上内容（v1.6.0） | 958,555 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版） · v1.6.0」 |
+| 二维码 | `qrcode.png`（492×630）编码 **带 `&v=` 的链接**，由 `tools/make-qrcode.py` 按当前版本自动生成 |
 
-**注意：链接必须带 `?sharecode=OTD3JQJQPI`**，裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 返回 403。
+**注意：链接必须带 `?sharecode=OTD3JQJQPI`**，且**对外分发要再带 `&v=<版本>`**。原因见下。
+
+### 边缘缓存：裸链接发布后会长期停在旧版（v1.6.0 实测）
+
+- 发布成功后，裸链接（`?sharecode=…`）响应头是 `EO-Cache-Status: HIT`，`Last-Modified` 还停在上一版，`Age` 超过 1100 秒仍不刷新；**重新发布一次也清不掉**。
+- 带任意额外参数（`&cb=随机` 或 `&v=1.6.0`）立刻 `MISS` 并返回新内容。
+- **`Cache-Control: no-cache` 请求头不被遵守，Ctrl+F5 也无效**（曾经误判为"硬刷新可绕过"）。全新浏览器配置同样拿到旧版，所以这不是客户端缓存。
+- 判定方法：`curl -s -D - -o /dev/null "<链接>" | grep -i "EO-Cache-Status\|Last-Modified"`，HIT + 旧时间戳即为缓存命中。
+- **规矩**：发布后验证一律加 `&cb=随机`；对外发的链接一律用 `&v=<APP_VERSION>`。
+- `tools/make-qrcode.py` 已自动读取 `index.html` 的 `APP_VERSION` 并追加 `&v`，所以每次发版只需重跑一次二维码脚本。
+
+裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 不带 sharecode 时返回 403。
 
 ### 与旧版切割核对（2026-10-23 复核，全部通过）
 
