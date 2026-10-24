@@ -435,6 +435,28 @@ fanc-milling-app/
 
 ---
 
+## 9.5 代码托管（GitHub，2026-10-24 起）
+
+| 项 | 值 |
+|---|---|
+| 远端 | `git@github.com:jfsite/fanc-milling-assistant.git`（**私有**仓库） |
+| 分支 | `main` |
+| 标签 | 每个发版一个 `vX.Y.Z`（v1.0.0 ~ v1.9.2 已推） |
+| 认证 | 本机 SSH 公钥（`~/.ssh/id_rsa.pub`，已在 GitHub 登记为 `jfsite`） |
+
+日常推送：
+
+```bash
+git add -A && git commit -m "..." && git push
+node tools/release.js && git push --tags   # 发版后别忘了推 tag
+```
+
+注意：
+
+- **私有仓库不提供 GitHub Pages**（免费账号只对 public 开放），所以线上入口仍是 WorkBuddy 分享链接；
+  若哪天转 public，先处理 `releases/`（21 MB 快照）与文档里的分享链接/appId。
+- 换机器时只需：登记 SSH 公钥 → `git clone` → 装 Node/Python（跑 tests 与 tools 需要）。
+
 ## 10. 历史档案
 
 - `CHANGELOG.md` —— 面向使用者的版本变更记录（v1.0 → 当前），发版前看一眼有没有漏记
