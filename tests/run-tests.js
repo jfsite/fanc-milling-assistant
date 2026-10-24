@@ -463,6 +463,18 @@ const GAPPED = [
 const ps4 = M.dwgPrimsToSvg(GAPPED);
 ok('开口轮廓标记未闭合', ps4.closed === false && ps4.closeGap > 39, ps4.closeGap);
 
+// 0.3mm 的接缝要能焊上，且合成后仍是 1 条轮廓
+const WELDED = [
+  {type:'line', x1:0, y1:0, x2:80, y2:0},
+  {type:'line', x1:80, y1:0.3, x2:80, y2:40},
+  {type:'line', x1:80, y1:40, x2:0, y2:40},
+  {type:'line', x1:0, y1:40, x2:0, y2:0.3}
+];
+const psW = M.dwgPrimsToSvg(WELDED);
+ok('0.3mm 接缝被焊上并判为闭合', psW.closed === true && psW.welded.length === 1, {closed:psW.closed, gaps:psW.gaps});
+ok('焊接后只有一个子路径', (psW.svg.match(/M/g) || []).length === 1, psW.svg.slice(0, 120));
+ok('焊接后解析仍为 1 条轮廓', M.parseSvgIR(psW.svg).ir.contours.length === 1);
+
 // 圆孔：circle 图元 → SVG 圆 → 解析成孔
 const ps5 = M.dwgPrimsToSvg(RECT4.concat([{type:'circle', cx:40, cy:20, r:4, role:'hole'}]));
 const back5 = M.parseSvgIR(ps5.svg);

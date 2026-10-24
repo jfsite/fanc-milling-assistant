@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.7.1";
+  const APP_VERSION = "1.7.2";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.7.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.7.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4714,15 +4714,20 @@ function dwgPrimsToSvg(rawPrims, opt){
     if(best < 0) break;
     used[best] = true;
     const nx = flip ? dwgPrimFlip(items[best]) : items[best];
-    if(bestD > tol) gaps.push({at:chain.length, gap:+bestD.toFixed(3)});
+    nx.gap = +bestD.toFixed(3);
+    if(bestD > tol) gaps.push({at:chain.length, gap:nx.gap});
     chain.push(nx);
     cur = nx;
   }
   if(chain.length < items.length) warn.push('有 ' + (items.length - chain.length) + ' 个图元接不上，已忽略');
 
+  const WELD = o.weld || 1.0;   // 1mm 内的接缝直接连起来（会告警），超过就断成新子路径
   const startPt = dwgPrimPt(chain[0], 0);
   const endPt = dwgPrimPt(chain[chain.length-1], 1);
   const closeGap = Math.hypot(endPt[0]-startPt[0], endPt[1]-startPt[1]);
+  const welded = gaps.filter(g=>g.gap <= WELD);
+  const breaks = gaps.filter(g=>g.gap > WELD);
+  const maxGap = gaps.reduce((m,g)=>Math.max(m, g.gap), 0);
 
   // 2) 包围盒（含圆弧采样）
   let pts = [];
@@ -4757,7 +4762,8 @@ function dwgPrimsToSvg(rawPrims, opt){
   chain.forEach(p=>{
     const pa = sx.apply(null, dwgPrimPt(p, 0));
     const pb = sx.apply(null, dwgPrimPt(p, 1));
-    const needM = !prev || Math.hypot(pa[0]-prev[0], pa[1]-prev[1]) > 1e-4;
+    const jump = !prev ? 0 : Math.hypot(pa[0]-prev[0], pa[1]-prev[1]);
+    const needM = !prev || jump > WELD;
     const head = needM ? ('M' + pa[0] + ' ' + pa[1]) : '';
     if(p.kind === 'line'){
       d.push(head + 'L' + pb[0] + ' ' + pb[1]);
@@ -4768,7 +4774,7 @@ function dwgPrimsToSvg(rawPrims, opt){
     }
     prev = pb;
   });
-  if(closeGap <= tol) d.push('Z');
+  if(closeGap <= WELD) d.push('Z');
 
   let body = '<path d="' + d.join('') + '" fill="none" stroke="#000" stroke-width="0.2"/>';
   circles.forEach(c=>{
@@ -4781,7 +4787,9 @@ function dwgPrimsToSvg(rawPrims, opt){
 
   return {
     ok: true, svg: svg, prims: chain.concat(circles),
-    gaps: gaps, closeGap: +closeGap.toFixed(3), closed: closeGap <= tol,
+    gaps: gaps, welded: welded, breaks: breaks, maxGap: +maxGap.toFixed(3),
+    closeGap: +closeGap.toFixed(3),
+    closed: closeGap <= WELD && breaks.length === 0,
     size: {w:+W.toFixed(3), h:+H.toFixed(3)}, warn: warn
   };
 }
@@ -5209,10 +5217,13 @@ async function dwgHandleFile(file){
 
       const checks = [];
       if(!ps.closed){
-        checks.push({lv:'error', code:'S01', msg:'轮廓未闭合，首尾差 ' + ps.closeGap + ' mm —— 图元有缺失或端点对不上'});
+        const why = ps.breaks.length
+          ? ('有 ' + ps.breaks.length + ' 处接缝超过 1mm（最大 ' + ps.maxGap + ' mm，在第 ' + ps.breaks[0].at + ' 段）')
+          : ('首尾差 ' + ps.closeGap + ' mm');
+        checks.push({lv:'error', code:'S01', msg:'轮廓未闭合：' + why + ' —— 模型给的图元端点对不上，需重试或改 SVG'});
       }
-      ps.gaps.forEach(g=>{
-        checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝有 ' + g.gap + ' mm 缺口（已自动接上）'});
+      (ps.welded || []).forEach(g=>{
+        checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝有 ' + g.gap + ' mm 缺口，已直接连起来（长度会略偏）'});
       });
       r.ir.contours.forEach((c2, i)=>{
         const hits = dwgSelfIntersect(c2.pts);
