@@ -47,7 +47,7 @@ fs.writeFileSync(modPath,
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
      + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
-     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw};');
+     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw, dwgOpenIR};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -466,15 +466,27 @@ ok('开口轮廓标记未闭合', ps4.closed === false && ps4.closeGap > 39, ps4
 
 // 0.3mm 的接缝要能焊上，且合成后仍是 1 条轮廓
 const WELDED = [
-  {type:'line', x1:0, y1:0, x2:80, y2:0},
+  {type:'line', x1:0, y1:0, x2:40, y2:0},
+  {type:'line', x1:40, y1:0, x2:80, y2:0},
   {type:'line', x1:80, y1:0.3, x2:80, y2:40},
-  {type:'line', x1:80, y1:40, x2:0, y2:40},
+  {type:'line', x1:80, y1:40, x2:40, y2:40},
+  {type:'line', x1:40, y1:40, x2:0, y2:40},
   {type:'line', x1:0, y1:40, x2:0, y2:0.3}
 ];
 const psW = M.dwgPrimsToSvg(WELDED);
-ok('0.3mm 接缝被焊上并判为闭合', psW.closed === true && psW.welded.length === 1, {closed:psW.closed, gaps:psW.gaps});
-ok('焊接后只有一个子路径', (psW.svg.match(/M/g) || []).length === 1, psW.svg.slice(0, 120));
-ok('焊接后解析仍为 1 条轮廓', M.parseSvgIR(psW.svg).ir.contours.length === 1);
+ok('断口不补线：0.3mm 也判为开口', psW.closed === false && psW.open === true && psW.gaps.length === 1,
+   {closed:psW.closed, open:psW.open, gaps:psW.gaps});
+ok('断口处另起子路径', (psW.svg.match(/M/g) || []).length === 2, psW.svg.slice(0, 160));
+ok('断口后切成 2 段', psW.fragments.length === 2, psW.fragments.map(f=>f.length));
+ok('断口 → IR 全是开放轮廓',
+   M.dwgOpenIR(psW).contours.length === 2 && M.dwgOpenIR(psW).contours.every(c=>c.open === true));
+
+// 开放段生成程序：不补闭合线，注释标 OPEN，G40 沿末段延长
+const irOpen = {contours:[{role:'outer', open:true, pts:[[0,0],[50,0],[50,40]]}], holes:[], size:{w:50,h:40}};
+const ncOpen = M.irToNC(irOpen, {mat:'45钢', toolD:10, depth:1, ap:1, safeZ:10});
+ok('开放段注释标 OPEN', /CONTOUR 1 OUTER OPEN/.test(ncOpen.code), ncOpen.code.split('\n').filter(l=>/CONTOUR/.test(l)));
+ok('开放段不回到起点', !/G01 X0 Y0/.test(ncOpen.code), ncOpen.code.split('\n').filter(l=>/G01 /.test(l)));
+ok('开放段每段都抬到安全高度', /G00 Z10/.test(ncOpen.code));
 
 // 圆孔：circle 图元 → SVG 圆 → 解析成孔
 const ps5 = M.dwgPrimsToSvg(RECT4.concat([{type:'circle', cx:40, cy:20, r:4, role:'hole'}]));

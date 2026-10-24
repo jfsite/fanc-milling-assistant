@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.8.3";
+  const APP_VERSION = "1.9.0";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -628,7 +628,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.8.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.9.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1371,8 +1371,8 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 - 模型**只输出图元**（直线段、圆弧用圆心+R+起止角、圆孔），不输出点列。所以 R100 就是 R100，不是 40 个点。
 - 本地按端点贪心串接（模型给的顺序乱了也没关系），接缝容差 0.05 mm。
 - 合成后在界面上给出**图元清单**（每条的长度、圆心、半径、起止角），逐条核对比核对两百个点现实。
-- 三道校验：**S01** 轮廓未闭合（缺口多少毫米、在第几段）、**S02** 自交（图元参数自相矛盾）、**S03** 尺寸对不上（图上标注与实测外形差 >0.6 mm）。
-- 有 S01/S02 时**阻断生成**；S03 只提示。
+- 三道校验：**S01** 断口（缺口位置与大小，**默认只提示、不阻断生成**）、**S02** 自交（阻断）、**S03** 尺寸对不上（提示）。
+- **断口按"不补线"处理**：见 10.2.8。
 - 合成出的 SVG 可以「下载 SVG」存下来，下次直接当矢量图纸上传，不再调模型。
 
 #### 10.2.3 生成所依据的参数
@@ -1468,6 +1468,20 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 | 图中未读到可用的总长/总宽标注 | 比例来自像素估算，必须手动核对或填「零件长/宽」 |
 | 标注长宽比与识别轮廓不一致 | 长宽比差 >8%，已按长度方向校准，短边需人工核对 |
 
+#### 10.2.8 断口怎么处理：不补线，抬刀再跳
+
+图上线条断开、端点对不上（常见于手绘或识别误差）时，程序**不会自动补一条线把缺口连起来**——
+补线等于改变零件形状，还会在缺口处多切一刀。
+
+实际做法：
+
+- 每个断口处**另起一段**，两段各自独立加工；
+- 段与段之间一定是 **`G00 Z安全高度` → `G00 X Y` → `G01 Z切深`**，绝不会贴着工件表面横穿；
+- 程序注释标出 `(CONTOUR 1 OUTER OPEN PASS 1/3 Z-1)`，`OPEN` 就是"这一段是开口的"；
+- 界面上把断口列成**注意**而不是错误：`轮廓有 1 处断开（# 2 段后 3mm）`，不阻断生成。
+
+开口段的引刀/退刀沿第一段/末段方向延长一个 `刀半径+2mm`，和闭合轮廓的引刀逻辑一致。
+
 #### 10.2.7 手动建模：改图元 / 贴基点坐标
 
 两条自救路径，都在「图纸生成程序」卡片里：
@@ -1540,6 +1554,7 @@ R 必须 ≥ 两点距离的一半。点「按基点生成轮廓」即合成 SVG
 - 书页照片（旋转、透视、书脊阴影）识别率明显低于电脑导出的图；实际教学建议用 SVG 或干净的 PNG 截图。
 - SVG 里被忽略的图元：`text`（尺寸数字）、`line`（标注线）、`image`、`pattern` 填充；嵌套 `<use>` 不支持。
 - 内轮廓每层都是垂直下刀，实做建议预钻孔或改用螺旋下刀。
+- 断口不补线，所以**断口多的图会切成很多短段**，程序里 G00 抬刀次数多、效率低；断口处的实际轮廓本来就是缺的，需人工判断是否要回到原点补画。
 - 生成结果**未经真实试切验证**，必须过一遍校验和刀轨演示，首件空运行。
 - 用 `file://` 直接双击打开时，云端相关能力会鉴权失败（Origin 为 null）。图纸方式里的 **SVG 解析是纯本地的**，`file://` 下仍可用；位图识别与文字生成需要发布链接。
 - 云端密钥与当前发布域名绑定（`https://fanuc-milling-w.app.workbuddy.host`）。通过**本应用官方分享链接**访问时正常；换到别的域名会提示鉴权失败，属预期情况。其余 9 个模块为纯本地运算，断网也能用。
@@ -4552,6 +4567,7 @@ function irToNC(ir, opt){
   const contours = (ir.contours || []).map(c=>{
     let pts = dwgDedupe(c.pts || []);
     if(pts.length < 3) return null;
+    if(c.open) return {role:'outer', pts:pts, open:true};   // 开放段不做方向归一，保持原走向
     const ccw = dwgArea(pts) > 0;
     const wantCCW = c.role === 'inner';
     if(ccw !== wantCCW) pts = pts.slice().reverse();
@@ -4560,10 +4576,17 @@ function irToNC(ir, opt){
 
   contours.forEach((c, ci)=>{
     const inner = c.role === 'inner';
-    let pts = dwgRotate(c.pts, dwgTopIdx(c.pts));
+    const open = !!c.open;      // 断口后的开放段：首尾不相接，不补线
+    let pts = open ? c.pts.slice() : dwgRotate(c.pts, dwgTopIdx(c.pts));
     const top = pts[0];
     let leadPt;
-    if(inner){
+    if(open){
+      // 沿第一段的反方向延长作引刀点，末段延长作退刀点
+      const p1 = pts[1] || top;
+      let dx = top[0]-p1[0], dy = top[1]-p1[1];
+      let dn = Math.hypot(dx, dy) || 1;
+      leadPt = [top[0] + dx/dn*lead, top[1] + dy/dn*lead];
+    } else if(inner){
       const g = dwgCentroid(pts);
       const dx = g[0]-top[0], dy = g[1]-top[1], dn = Math.hypot(dx, dy) || 1;
       leadPt = [top[0] + dx/dn*lead, top[1] + dy/dn*lead];
@@ -4572,7 +4595,8 @@ function irToNC(ir, opt){
     }
     for(let k=1;k<=nPass;k++){
       const z = +(ap*k).toFixed(2);
-      push('(CONTOUR ' + (ci+1) + (inner ? ' INNER' : ' OUTER') + ' PASS ' + k + '/' + nPass + ' Z-' + f2(z) + ')');
+      push('(CONTOUR ' + (ci+1) + (inner ? ' INNER' : ' OUTER') + (open ? ' OPEN' : '')
+        + ' PASS ' + k + '/' + nPass + ' Z-' + f2(z) + ')');
       push('G00 Z' + f2(safe));
       push('G00 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
       push('G01 Z-' + f2(z) + ' F' + plungeF);
@@ -4592,9 +4616,16 @@ function irToNC(ir, opt){
       } else {
         for(let i=1;i<pts.length;i++) push('G01 X' + f2(pts[i][0]) + ' Y' + f2(pts[i][1]));
       }
-      const lastP = pts[pts.length-1];
-      push('G01 X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]));
-      push('G40 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
+      if(open){
+        // 开放段：不回到起点，沿末段方向延长退刀
+        const a = pts[pts.length-2] || pts[0], b2 = pts[pts.length-1];
+        let dx = b2[0]-a[0], dy = b2[1]-a[1];
+        let dn = Math.hypot(dx, dy) || 1;
+        push('G40 X' + f2(b2[0] + dx/dn*lead) + ' Y' + f2(b2[1] + dy/dn*lead));
+      } else {
+        push('G01 X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]));
+        push('G40 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
+      }
     }
   });
 
@@ -4891,8 +4922,9 @@ function dwgPrimsToSvg(rawPrims, opt){
   chain.forEach(p=>{
     const pa = sx.apply(null, dwgPrimPt(p, 0));
     const pb = sx.apply(null, dwgPrimPt(p, 1));
+    // 断口不补线：只要端点对不上就另起一条子路径，交给程序用 G00 抬刀跨越
     const jump = !prev ? 0 : Math.hypot(pa[0]-prev[0], pa[1]-prev[1]);
-    const needM = !prev || jump > WELD;
+    const needM = !prev || jump > 1e-4;
     const head = needM ? ('M' + pa[0] + ' ' + pa[1]) : '';
     if(p.kind === 'line'){
       d.push(head + 'L' + pb[0] + ' ' + pb[1]);
@@ -4903,7 +4935,8 @@ function dwgPrimsToSvg(rawPrims, opt){
     }
     prev = pb;
   });
-  if(closeGap <= WELD) d.push('Z');
+  const hasBreak = (gaps || []).length > 0 || closeGap > 1e-4;
+  if(!hasBreak) d.push('Z');
 
   let body = '<path d="' + d.join('') + '" fill="none" stroke="#000" stroke-width="0.2"/>';
   circles.forEach(c=>{
@@ -4911,14 +4944,27 @@ function dwgPrimsToSvg(rawPrims, opt){
     body += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="' + (+c.r.toFixed(4)) + '" fill="none" stroke="#000" stroke-width="0.2"/>';
   });
 
+  // 断口把链切成若干段，每段是一组采样点（给开放路径直接用，避免 SVG 解析丢掉退化形状）
+  const fragments = [];
+  let curFrag = [];
+  chain.forEach(p=>{
+    if(p.gap && p.gap > 1e-4){ if(curFrag.length > 1) fragments.push(curFrag); curFrag = []; }
+    const pts2 = dwgPrimSample(p, 0.5).map(q=>[+(q[0]-bb.minX).toFixed(4), +(q[1]-bb.minY).toFixed(4)]);
+    if(curFrag.length) pts2.shift();
+    curFrag = curFrag.concat(pts2);
+  });
+  if(curFrag.length > 1) fragments.push(curFrag);
+
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W.toFixed(3) + 'mm" height="' + H.toFixed(3)
     + 'mm" viewBox="0 0 ' + W.toFixed(3) + ' ' + H.toFixed(3) + '">' + body + '</svg>';
 
   return {
     ok: true, svg: svg, prims: chain.concat(circles),
-    gaps: gaps, welded: welded, breaks: breaks, maxGap: +maxGap.toFixed(3),
+    gaps: gaps, welded: welded, breaks: breaks, maxGap: +maxGap.toFixed(3), fragments: fragments,
+    origin: [bb.minX, bb.minY],
     closeGap: +closeGap.toFixed(3),
-    closed: closeGap <= WELD && breaks.length === 0,
+    open: hasBreak,
+    closed: !hasBreak,
     size: {w:+W.toFixed(3), h:+H.toFixed(3)}, warn: warn
   };
 }
@@ -5361,19 +5407,16 @@ async function dwgHandleFile(file){
       const v = await dwgRasterToPrims(file);
       const ps = dwgPrimsToSvg(v.prims);
       if(!ps.ok){ dwgSetStatus('失败：' + ps.error, true); return; }
-      const r = parseSvgIR(ps.svg);
-      if(!r.ok){ dwgSetStatus('图元合成 SVG 后解析失败：' + r.error, true); return; }
+      const r = ps.open ? {ok:true, ir: dwgOpenIR(ps)} : parseSvgIR(ps.svg);
+      if(!r.ok){ dwgSetStatus('图元合成后解析失败：' + r.error, true); return; }
 
       const checks = [];
-      if(!ps.closed){
-        const why = ps.breaks.length
-          ? ('有 ' + ps.breaks.length + ' 处接缝超过 1mm（最大 ' + ps.maxGap + ' mm，在第 ' + ps.breaks[0].at + ' 段）')
-          : ('首尾差 ' + ps.closeGap + ' mm');
-        checks.push({lv:'error', code:'S01', msg:'轮廓未闭合：' + why + ' —— 模型给的图元端点对不上，需重试或改 SVG'});
+      if(ps.gaps.length){
+        const list = ps.gaps.slice(0, 6).map(g=>('# ' + g.at + ' 段后 ' + g.gap + 'mm')).join('、');
+        checks.push({lv:'warn', code:'S01',
+          msg:'轮廓有 ' + ps.gaps.length + ' 处断开（' + list + (ps.gaps.length > 6 ? ' 等' : '')
+            + '）：不补线，程序里各段之间 G00 抬到安全高度再跳过去'});
       }
-      (ps.welded || []).forEach(g=>{
-        checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝有 ' + g.gap + ' mm 缺口，已直接连起来（长度会略偏）'});
-      });
       r.ir.contours.forEach((c2, i)=>{
         const hits = dwgSelfIntersect(c2.pts);
         if(hits > 0) checks.push({lv:'error', code:'S02', msg:'轮廓 ' + (i+1) + ' 自交 ' + hits + ' 处，图元参数可能有误'});
@@ -5509,17 +5552,16 @@ function dwgRecompose(prims, opt){
   const o = opt || {};
   const ps = dwgPrimsToSvg(prims.map(dwgPrimToRaw));
   if(!ps.ok){ dwgSetStatus('合成失败：' + ps.error, true); return false; }
-  const r = parseSvgIR(ps.svg);
+  const r = ps.open ? {ok:true, ir: dwgOpenIR(ps)} : parseSvgIR(ps.svg);
   if(!r.ok){ dwgSetStatus('合成后解析失败：' + r.error, true); return false; }
 
   const checks = [];
-  if(!ps.closed){
-    const why = ps.breaks && ps.breaks.length
-      ? ('有 ' + ps.breaks.length + ' 处接缝超过 1mm（最大 ' + ps.maxGap + ' mm）')
-      : ('首尾差 ' + ps.closeGap + ' mm');
-    checks.push({lv:'error', code:'S01', msg:'轮廓未闭合：' + why});
+  if(ps.gaps && ps.gaps.length){
+    const list = ps.gaps.slice(0, 6).map(g=>('# ' + g.at + ' 段后 ' + g.gap + 'mm')).join('、');
+    checks.push({lv:'warn', code:'S01',
+      msg:'轮廓有 ' + ps.gaps.length + ' 处断开（' + list + (ps.gaps.length > 6 ? ' 等' : '')
+        + '）：不补线，程序里各段之间 G00 抬到安全高度再跳过去'});
   }
-  (ps.welded || []).forEach(g=>checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝 ' + g.gap + ' mm，已直接连起来'}));
   r.ir.contours.forEach((c2, i)=>{
     const hits = dwgSelfIntersect(c2.pts);
     if(hits > 0) checks.push({lv:'error', code:'S02', msg:'轮廓 ' + (i+1) + ' 自交 ' + hits + ' 处'});
@@ -5641,6 +5683,23 @@ function dwgRenderSegTable(){
     dwgRenderSegTable();
   };
 })();
+
+// 断口结果 → IR：每段一条开放轮廓，圆孔照旧
+function dwgOpenIR(ps){
+  const contours = (ps.fragments || []).filter(f=>f.length > 1)
+    .map(f=>({role:'outer', open:true, pts:f}));
+  const o = ps.origin || [0, 0];
+  const h2 = (ps.prims || []).filter(p=>p.kind === 'circle').map(c=>({
+    x:+(c.cx - o[0]).toFixed(3), y:+(c.cy - o[1]).toFixed(3), d:+(c.r*2).toFixed(3)
+  }));
+  const all = contours.reduce((a,c)=>a.concat(c.pts), []);
+  const bb = all.length ? dwgBBox(all) : {minX:0, minY:0, maxX:0, maxY:0};
+  return {
+    unit:'mm', src:'raster', openPath:true,
+    size:{w:+(bb.maxX-bb.minX).toFixed(3), h:+(bb.maxY-bb.minY).toFixed(3)},
+    contours:contours, holes:h2, warn:[]
+  };
+}
 
 // ===== 初始化 =====
 function renderVersion(){
