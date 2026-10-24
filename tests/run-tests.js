@@ -47,7 +47,7 @@ fs.writeFileSync(modPath,
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
      + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
-     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims};');
+     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -545,6 +545,10 @@ const svgBox = M.dwgPrimsToSvg(linePrims);
 ok('基点围成 50×40 闭合轮廓', svgBox.closed && near(svgBox.size.w, 50, 1e-6) && near(svgBox.size.h, 40, 1e-6), svgBox.size);
 
 // 指定某段为圆弧
+const rawLine = {type:'line', x1:0, y1:0, x2:10, y2:0};
+ok('原始格式原样返回', M.dwgPrimToRaw(rawLine) === rawLine);
+ok('归一化格式转回原始', (M.dwgPrimToRaw({kind:'arc', cx:1, cy:2, r:3, a0:10, sw:20}) || {}).type === 'arc');
+
 const arcPrims = M.dwgPointsToPrims(square, [{kind:'arc', r:40, side:1}, {kind:'line'}, {kind:'line'}, {kind:'line'}]);
 ok('指定段变成圆弧', arcPrims[0].type === 'arc', arcPrims.map(p=>p.type));
 ok('混合图元仍闭合', M.dwgPrimsToSvg(arcPrims).closed === true);

@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.8.0";
+  const APP_VERSION = "1.8.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -628,7 +628,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.8.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.8.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -5452,6 +5452,8 @@ function dwgPrimInputs(p, i){
 
 // --- A：图元可编辑 ---
 function dwgPrimToRaw(p){
+  if(!p) return p;
+  if(p.type) return p;   // 已经是原始格式（基点建模生成的），直接用
   if(p.kind === 'line') return {type:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2};
   if(p.kind === 'circle') return {type:'circle', cx:p.cx, cy:p.cy, r:p.r, role:p.role || 'hole'};
   return {type:'arc', cx:p.cx, cy:p.cy, r:p.r, a0:p.a0, a1:p.a0 + p.sw};
