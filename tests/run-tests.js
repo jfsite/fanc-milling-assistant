@@ -45,7 +45,7 @@ fs.writeFileSync(modPath,
      + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
-     + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys};');
+     + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -407,6 +407,8 @@ ok('铣圆版本 0 错误', DLR4.issues.filter(x=>x.lv === 'error').length === 0
 ok('围栏 JSON 可解析', (M.dwgExtractJson('```json\n{"a":1}\n```') || {}).a === 1);
 ok('夹在文字里也能解析', (M.dwgExtractJson('结果如下 {"a":2} 完毕') || {}).a === 2);
 ok('非法 JSON 返回 null', M.dwgExtractJson('抱歉，我无法识别') === null);
+
+ok('无 location 环境（Node/测试）下版本自检不报错', catchErr(()=>{ M.checkUpdate(); }) === null);
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

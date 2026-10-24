@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.6.0";
+  const APP_VERSION = "1.6.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -170,6 +170,12 @@
 .dwg-sum .s b{font-size:15px;color:var(--txt);font-weight:600}
 .dwg-sum .s span{font-size:11px;color:var(--sub)}
 .dwg-sep{height:1px;background:var(--line);margin:16px 0 14px}
+.ver-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:99;display:flex;gap:10px;align-items:center;
+  background:#171a1f;color:#fff;border-radius:999px;padding:9px 12px 9px 16px;font-size:13px;box-shadow:0 8px 24px rgba(15,23,42,.28)}
+.ver-bar b{font-weight:600}
+.ver-bar span{color:#cbd5e1;font-size:12px}
+.ver-bar button{border:0;border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;background:#185fa5;color:#fff}
+.ver-bar button#ver-bar-x{background:transparent;color:#94a3b8;padding:2px 6px;font-size:16px;line-height:1}
 </style>
 </head>
 <body>
@@ -607,7 +613,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.6.0 ｜ 形态：单文件 HTML（`index.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.6.1 ｜ 形态：单文件 HTML（`index.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4880,6 +4886,40 @@ function renderVersion(){
   }
 }
 renderVersion();
+checkUpdate();
+// 页面来自缓存副本时提示刷新（版本自检）
+function showUpdateBar(v){
+  if(document.getElementById('ver-bar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'ver-bar';
+  bar.className = 'ver-bar';
+  bar.innerHTML = '<b>线上已更新到 v' + v + '</b>'
+    + '<span>当前页面是 v' + APP_VERSION + ' 的缓存副本</span>'
+    + '<button id="ver-bar-go">刷新到新版</button>'
+    + '<button id="ver-bar-x" title="暂不刷新">×</button>';
+  document.body.appendChild(bar);
+  document.getElementById('ver-bar-go').onclick = ()=>{
+    const u = new URL(location.href);
+    u.searchParams.set('_', Date.now());  // 换 URL 才能绕开边缘缓存
+    location.replace(u.toString());
+  };
+  document.getElementById('ver-bar-x').onclick = ()=>{ bar.remove(); };
+}
+
+function checkUpdate(){
+  if(typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return; // file:// 跳过
+  const K = 'fanucW.verCheck', now = Date.now();
+  try{
+    const last = +(localStorage.getItem(K) || 0);
+    if(now - last < 30*60*1000) return; // 半小时内只查一次
+    localStorage.setItem(K, String(now));
+  }catch(e){}
+  fetch('version.json?ts=' + now, {cache:'no-store'})
+    .then(r=> r.ok ? r.json() : null)
+    .then(j=>{ if(j && j.v && j.v !== APP_VERSION) showUpdateBar(j.v); })
+    .catch(()=>{});
+}
+
 renderTable();
 restoreAll();
 renderCodeList();

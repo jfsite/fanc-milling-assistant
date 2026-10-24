@@ -127,6 +127,12 @@ function main() {
   }
 
   console.log(`\n发版 ${tag}：`);
+  step('写 version.json', () => {
+    const file = path.join(ROOT, 'version.json');
+    fs.writeFileSync(file, JSON.stringify({v, built: new Date().toISOString()}, null, 2) + '\n');
+    return 'v' + v;
+  });
+
   step('写快照', () => {
     fs.mkdirSync(SHOT_DIR, { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'index.html'), shot);
@@ -134,7 +140,7 @@ function main() {
   });
 
   step('提交快照', () => {
-    git(['add', path.relative(ROOT, shot)]);
+    git(['add', path.relative(ROOT, shot), 'version.json']);
     if (git(['diff', '--cached', '--name-only']).trim()) {
       git(['commit', '-q', '-m', `release: ${tag} 快照`]);
       return 'ok';
