@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.7.4";
+  const APP_VERSION = "1.8.0";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -550,6 +550,16 @@
       <p class="hint" style="margin-bottom:4px">识别尺寸不准时，在这里填图纸标注的总长/总宽，生成前会等比校正（适合<b>位图识别</b>；SVG 已是精确几何，无需填写）。</p>
       <p class="hint">刀补用 G41 + D 号（D 号与 T 号相同），半径值请在机床刀补表里填 <b>刀具半径</b>。程序注释统一用英文，避免部分系统读中文报警。</p>
     </details>
+    <details id="dwg-manual" style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0">手动建模：粘贴基点坐标（不用图纸）</summary>
+      <p class="hint" style="margin:8px 0">把基点按顺序粘进来，一行一个。支持 <code>A: (-50.00, -53.02)</code>、<code>A（-50.00，-53.02）</code>、<code>-50.00, -53.02</code> 这些写法，顺序就是轮廓的走向。</p>
+      <textarea id="bp-text" rows="5" style="width:100%;font-family:var(--mono);font-size:13px" placeholder="A: (-50.00, -53.02)&#10;B: (-38.65, -27.52)&#10;C: (-12.57, -32.66)&#10;D: (-22.90, -35.53)"></textarea>
+      <div class="row" style="margin:8px 0">
+        <button class="ghost" id="bp-parse">解析基点</button>
+        <span id="bp-status" class="hint" style="align-self:center"></span>
+      </div>
+      <div id="bp-seg"></div>
+    </details>
     <div class="row" style="margin:12px 0">
       <button class="primary" id="btn-dwg-gen" disabled>生成程序</button>
       <span id="dwg-status" class="hint" style="align-self:center"></span>
@@ -618,7 +628,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.7.4 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.8.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1457,6 +1467,33 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 | 标注「78」= 78 与轮廓实测 80×40 对不上 | S03：提示某条标注与外形不符，核对那条图元 |
 | 图中未读到可用的总长/总宽标注 | 比例来自像素估算，必须手动核对或填「零件长/宽」 |
 | 标注长宽比与识别轮廓不一致 | 长宽比差 >8%，已按长度方向校准，短边需人工核对 |
+
+#### 10.2.7 手动建模：改图元 / 贴基点坐标
+
+两条自救路径，都在「图纸生成程序」卡片里：
+
+**① 图元直接改数**（识别结果差一点时用）
+
+图元清单现在每个参数都是输入框：直线给 X1/Y1/X2/Y2，圆弧给 圆心 X/Y、R、起止角，孔给 X/Y/R。
+改完点「应用修改并重新合成」，会重新算闭合/自交/尺寸，并刷新轮廓与 SVG。
+典型用法：S01 报"缺口 0.8mm"，把某段弧的终角或端点改一下就能合上。
+
+**② 贴基点坐标**（教材图有基点表时用，精度最高）
+
+展开「手动建模：粘贴基点坐标」，一行一个点，顺序就是轮廓走向：
+
+```
+A: (-50.00, -53.02)
+B: (-38.65, -27.52)
+C: (-12.57, -32.66)
+D: (-22.90, -35.53)
+```
+
+支持 `A: (x, y)`、`A（x，y）`、`x, y`（无名称）三种写法，中文括号也认。
+点「解析基点」后会出现**逐段表格**：每段可选「直线 / 圆弧」，圆弧填 R 并选「凸（外）/ 凹（内）」，
+R 必须 ≥ 两点距离的一半。点「按基点生成轮廓」即合成 SVG 并进入同一条生成链路。
+
+> 这条路径**完全不经过模型**，几何由坐标决定，是精度最高的一种。
 
 ### 10.3 文字生成
 
@@ -5067,13 +5104,15 @@ function dwgRenderSummary(){
 
   if(prims.length){
     const rows = prims.map((p,i)=>'<tr><td class="n">' + (i+1) + '</td><td>' + p.kind
-      + '</td><td style="font-family:var(--mono);font-size:12px">' + esc(dwgPrimText(p)) + '</td>'
+      + '</td><td>' + dwgPrimInputs(p, i) + '</td>'
       + '<td class="n">' + dwgPrimLen(p).toFixed(2) + '</td></tr>').join('');
-    h += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0">'
-      + '图元清单（' + prims.length + ' 条，逐条核对 R 值与坐标）</summary>'
-      + '<div style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px">'
-      + '<table><thead><tr><th style="width:44px">#</th><th style="width:72px">类型</th><th>参数</th><th style="width:72px">长度</th></tr></thead>'
-      + '<tbody>' + rows + '</tbody></table></div></details>';
+    h += '<details id="dw-prims-box" style="margin-top:10px" open><summary style="cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0">'
+      + '图元清单（' + prims.length + ' 条，可直接改数值）</summary>'
+      + '<div style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px">'
+      + '<table><thead><tr><th style="width:40px">#</th><th style="width:60px">类型</th><th>参数（可改）</th><th style="width:66px">长度</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table></div>'
+      + '<div class="row" style="margin-top:8px"><button class="ghost" id="dw-apply-prims">应用修改并重新合成</button>'
+      + '<span class="hint" style="align-self:center">改完点这里，会重算闭合/自交/尺寸</span></div></details>';
   }
 
   if((DWG.dims || []).length){
@@ -5095,6 +5134,13 @@ function dwgRenderSummary(){
       + '<span class="hint" style="align-self:center">这份 SVG 就是中间产物，可存档、可复用</span></div>';
   }
   box.innerHTML = h;
+
+  const applyBtn = document.getElementById('dw-apply-prims');
+  if(applyBtn) applyBtn.onclick = ()=>{
+    const edited = dwgReadPrimEdits();
+    DWG.dims = [];
+    dwgRecompose(edited);
+  };
 
   const btn = document.getElementById('dw-get-svg');
   if(btn) btn.onclick = ()=>{
@@ -5382,6 +5428,183 @@ async function dwgHandleFile(file){
   }
   const gen = document.getElementById('btn-dwg-gen');
   if(gen) gen.onclick = dwgGenerate;
+})();
+
+
+// A：把一条图元渲染成可编辑的输入框
+function dwgPrimInputs(p, i){
+  const f = (k, v, w)=>{
+    const step = (k === 'a0' || k === 'a1') ? '1' : '0.01';
+    return '<input class="dw-pf" data-i="' + i + '" data-k="' + k + '" type="number" step="' + step
+      + '" style="width:' + (w || 74) + 'px" value="' + (+v).toFixed(2) + '">';
+  };
+  const tip = (t)=>' <span style="font-size:11px;color:#94a3b8">' + t + '</span>';
+  if(p.kind === 'line'){
+    return tip('X1') + f('x1', p.x1) + tip('Y1') + f('y1', p.y1)
+         + tip('X2') + f('x2', p.x2) + tip('Y2') + f('y2', p.y2);
+  }
+  if(p.kind === 'circle'){
+    return tip('X') + f('cx', p.cx) + tip('Y') + f('cy', p.cy) + tip('R') + f('r', p.r);
+  }
+  return tip('X') + f('cx', p.cx) + tip('Y') + f('cy', p.cy) + tip('R') + f('r', p.r)
+       + tip('起角') + f('a0', p.a0, 62) + tip('终角') + f('a1', p.a0 + p.sw, 62);
+}
+
+// --- A：图元可编辑 ---
+function dwgPrimToRaw(p){
+  if(p.kind === 'line') return {type:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2};
+  if(p.kind === 'circle') return {type:'circle', cx:p.cx, cy:p.cy, r:p.r, role:p.role || 'hole'};
+  return {type:'arc', cx:p.cx, cy:p.cy, r:p.r, a0:p.a0, a1:p.a0 + p.sw};
+}
+
+function dwgReadPrimEdits(){
+  const out = JSON.parse(JSON.stringify(DWG.prims || []));
+  document.querySelectorAll('.dw-pf').forEach(el=>{
+    const i = +el.dataset.i, k = el.dataset.k;
+    const v = parseFloat(el.value);
+    if(!isFinite(v) || !out[i]) return;
+    if(k === 'sw'){ out[i].sw = v - out[i].a0; }
+    else out[i][k] = v;
+  });
+  return out;
+}
+
+// 把一组图元重新合成 SVG → 轮廓 → 校验（A 与 C 共用）
+function dwgRecompose(prims, opt){
+  const o = opt || {};
+  const ps = dwgPrimsToSvg(prims.map(dwgPrimToRaw));
+  if(!ps.ok){ dwgSetStatus('合成失败：' + ps.error, true); return false; }
+  const r = parseSvgIR(ps.svg);
+  if(!r.ok){ dwgSetStatus('合成后解析失败：' + r.error, true); return false; }
+
+  const checks = [];
+  if(!ps.closed){
+    const why = ps.breaks && ps.breaks.length
+      ? ('有 ' + ps.breaks.length + ' 处接缝超过 1mm（最大 ' + ps.maxGap + ' mm）')
+      : ('首尾差 ' + ps.closeGap + ' mm');
+    checks.push({lv:'error', code:'S01', msg:'轮廓未闭合：' + why});
+  }
+  (ps.welded || []).forEach(g=>checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝 ' + g.gap + ' mm，已直接连起来'}));
+  r.ir.contours.forEach((c2, i)=>{
+    const hits = dwgSelfIntersect(c2.pts);
+    if(hits > 0) checks.push({lv:'error', code:'S02', msg:'轮廓 ' + (i+1) + ' 自交 ' + hits + ' 处'});
+  });
+  if(DWG.dims && DWG.dims.length) dwgDimsCheck(r.ir, DWG.dims).forEach(x=>checks.push(x));
+
+  DWG.kind = DWG.kind === 'svg' ? 'svg' : 'manual';
+  DWG.prims = ps.prims;
+  DWG.svg = ps.svg;
+  DWG.stats = {closed:ps.closed, closeGap:ps.closeGap, gaps:(ps.gaps||[]).length, size:ps.size};
+  DWG.checks = checks;
+  DWG.ir = r.ir;
+  DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
+  DWG.code = '';
+  document.getElementById('dwg-out').style.display = 'none';
+  dwgRenderSummary();
+
+  const bad = checks.filter(x=>x.lv === 'error').length;
+  const gen = document.getElementById('btn-dwg-gen');
+  if(gen) gen.disabled = bad > 0;
+  dwgSetStatus(bad ? ('有 ' + bad + ' 个阻断问题，先看提示') : ('已按图元合成轮廓：' + r.ir.size.w + ' × ' + r.ir.size.h + ' mm，可生成程序'), bad > 0);
+  return bad === 0;
+}
+
+// --- C：基点坐标 → 图元 ---
+function dwgParsePoints(text){
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(line=>{
+    const t = line.trim();
+    if(!t) return;
+    const nums = t.match(/-?\d+(?:\.\d+)?/g);
+    if(!nums || nums.length < 2) return;
+    const name = (t.match(/^([A-Za-z#]\d*)\s*[:：]/) || [])[1] || '';
+    const x = parseFloat(nums[0]), y = parseFloat(nums[1]);
+    if(isFinite(x) && isFinite(y)) out.push({name:name, x:x, y:y});
+  });
+  return out;
+}
+
+// 两点 + 半径 + 凸向 → 圆弧图元（取劣弧）
+function dwgArcFrom2Pts(x1, y1, x2, y2, R, side){
+  const dx = x2-x1, dy = y2-y1, d = Math.hypot(dx, dy);
+  if(!(R > 0) || d < 1e-9 || d > 2*R + 1e-9) return null;
+  const mx = (x1+x2)/2, my = (y1+y2)/2;
+  const h = Math.sqrt(Math.max(R*R - (d/2)*(d/2), 0));
+  const nx = -dy/d, ny = dx/d;
+  const sg = side >= 0 ? 1 : -1;
+  const cx = mx + nx*h*sg, cy = my + ny*h*sg;
+  const a0 = Math.atan2(y1-cy, x1-cx)*180/Math.PI;
+  const a1 = Math.atan2(y2-cy, x2-cx)*180/Math.PI;
+  return {type:'arc', cx:cx, cy:cy, r:R, a0:a0, a1:a1};
+}
+
+function dwgPointsToPrims(pts, segs){
+  const out = [];
+  const n = pts.length;
+  for(let i=0;i<n;i++){
+    const a = pts[i], b = pts[(i+1)%n];
+    const cfg = (segs && segs[i]) || {kind:'line'};
+    if(cfg.kind === 'arc' && cfg.r > 0){
+      const arc = dwgArcFrom2Pts(a.x, a.y, b.x, b.y, cfg.r, cfg.side === -1 ? -1 : 1);
+      if(arc){ out.push(arc); continue; }
+    }
+    out.push({type:'line', x1:a.x, y1:a.y, x2:b.x, y2:b.y});
+  }
+  return out;
+}
+
+let BP_PTS = [], BP_SEGS = [];
+
+function dwgRenderSegTable(){
+  const box = document.getElementById('bp-seg');
+  if(!box) return;
+  if(BP_PTS.length < 3){ box.innerHTML = ''; return; }
+  const rows = BP_PTS.map((p, i)=>{
+    const q = BP_PTS[(i+1)%BP_PTS.length];
+    const cur = BP_SEGS[i] || {kind:'line', r:0, side:1};
+    return '<tr>'
+      + '<td>' + (p.name || ('P'+(i+1))) + ' → ' + (q.name || ('P'+(((i+1)%BP_PTS.length)+1))) + '</td>'
+      + '<td><select class="bp-k" data-i="' + i + '">'
+      +   '<option value="line"' + (cur.kind === 'line' ? ' selected' : '') + '>直线</option>'
+      +   '<option value="arc"' + (cur.kind === 'arc' ? ' selected' : '') + '>圆弧</option>'
+      + '</select></td>'
+      + '<td><input class="bp-r" data-i="' + i + '" type="number" step="0.01" style="width:80px" value="'
+      +   (cur.r || '') + '" placeholder="R"></td>'
+      + '<td><select class="bp-s" data-i="' + i + '">'
+      +   '<option value="1"' + (cur.side !== -1 ? ' selected' : '') + '>凸（外）</option>'
+      +   '<option value="-1"' + (cur.side === -1 ? ' selected' : '') + '>凹（内）</option>'
+      + '</select></td></tr>';
+  }).join('');
+  box.innerHTML = '<div style="border:1px solid var(--line);border-radius:8px;margin-top:8px">'
+    + '<table><thead><tr><th>段</th><th style="width:90px">类型</th><th style="width:92px">R</th><th style="width:100px">凸向</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>'
+    + '<div class="row" style="margin-top:8px"><button class="ghost" id="bp-build">按基点生成轮廓</button>'
+    + '<span class="hint" style="align-self:center">直线段忽略 R；圆弧段 R 必须 ≥ 两点距离的一半</span></div>';
+  document.getElementById('bp-build').onclick = ()=>{
+    BP_SEGS = BP_PTS.map((p, i)=>{
+      const k = box.querySelector('.bp-k[data-i="' + i + '"]').value;
+      const r = parseFloat(box.querySelector('.bp-r[data-i="' + i + '"]').value);
+      const sd = parseFloat(box.querySelector('.bp-s[data-i="' + i + '"]').value);
+      return {kind:k, r:isFinite(r) ? r : 0, side:sd === -1 ? -1 : 1};
+    });
+    const prims = dwgPointsToPrims(BP_PTS, BP_SEGS);
+    DWG.dims = [];
+    DWG.kind = 'manual';
+    dwgRecompose(prims);
+  };
+}
+
+(function wireManual(){
+  const btn = document.getElementById('bp-parse');
+  if(!btn) return;
+  btn.onclick = ()=>{
+    const el = document.getElementById('bp-status');
+    BP_PTS = dwgParsePoints(document.getElementById('bp-text').value);
+    if(!BP_PTS.length){ if(el){ el.textContent = '没读到坐标，一行一个点，例如 A: (-50.00, -53.02)'; el.style.color = 'var(--danger)'; } return; }
+    if(BP_PTS.length < 3){ if(el){ el.textContent = '至少要 3 个点才能围成轮廓'; el.style.color = 'var(--danger)'; } return; }
+    if(el){ el.textContent = '读到 ' + BP_PTS.length + ' 个基点，逐段选直线或圆弧后生成'; el.style.color = 'var(--accent)'; }
+    dwgRenderSegTable();
+  };
 })();
 
 // ===== 初始化 =====

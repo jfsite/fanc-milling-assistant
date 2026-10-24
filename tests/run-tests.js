@@ -46,7 +46,8 @@ fs.writeFileSync(modPath,
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
-     + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck, dwgFitCircle, dwgFitArcs};');
+     + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
+     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -517,6 +518,36 @@ ok('圆弧用 I/J 表示', /G0[23] X[\d.-]+ Y[\d.-]+ I-?[\d.]+ J-?[\d.]+/.test(n
 ok('拟合后的程序仍 0 错误',
    M.lintProgram(ncC.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv === 'error').length === 0,
    M.lintProgram(ncC.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv==='error'));
+
+// --- 14. 基点坐标 → 轮廓 ---
+const bpText = 'A: (-50.00, -53.02)\nB: (-38.65, -27.52)\nC（-12.57，-32.66）\n-22.90, -35.53';
+const bp = M.dwgParsePoints(bpText);
+ok('四种写法都解析出来', bp.length === 4, bp);
+ok('点名称与坐标正确',
+   bp[0].name === 'A' && near(bp[0].x, -50, 1e-9) && near(bp[0].y, -53.02, 1e-9), bp[0]);
+ok('中文括号也认', bp.length > 2 && near(bp[2].x, -12.57, 1e-9), bp[2]);
+ok('无名称的行也能收', bp.length === 4 && near(bp[3].y, -35.53, 1e-9), bp[3]);
+ok('空行与乱写不产生点', M.dwgParsePoints('\n\nabc\n1,2\n').length === 1);
+
+// 两点 + 半径 → 圆弧
+const arc1 = M.dwgArcFrom2Pts(0, 0, 20, 0, 15, 1);
+ok('给定 R 生成圆弧', !!arc1 && arc1.type === 'arc', arc1);
+ok('圆心到两端点都是 R',
+   arc1 && near(Math.hypot(0-arc1.cx, 0-arc1.cy), 15, 1e-6)
+        && near(Math.hypot(20-arc1.cx, 0-arc1.cy), 15, 1e-6), arc1);
+ok('R 小于半弦长时返回 null', M.dwgArcFrom2Pts(0, 0, 20, 0, 5, 1) === null);
+
+// 4 个基点 → 4 段直线（默认）
+const square = [{x:0,y:0},{x:50,y:0},{x:50,y:40},{x:0,y:40}];
+const linePrims = M.dwgPointsToPrims(square, null);
+ok('默认全用直线', linePrims.length === 4 && linePrims.every(p=>p.type === 'line'), linePrims.map(p=>p.type));
+const svgBox = M.dwgPrimsToSvg(linePrims);
+ok('基点围成 50×40 闭合轮廓', svgBox.closed && near(svgBox.size.w, 50, 1e-6) && near(svgBox.size.h, 40, 1e-6), svgBox.size);
+
+// 指定某段为圆弧
+const arcPrims = M.dwgPointsToPrims(square, [{kind:'arc', r:40, side:1}, {kind:'line'}, {kind:'line'}, {kind:'line'}]);
+ok('指定段变成圆弧', arcPrims[0].type === 'arc', arcPrims.map(p=>p.type));
+ok('混合图元仍闭合', M.dwgPrimsToSvg(arcPrims).closed === true);
 
 // 生成结果仍要能过 43 条校验
 const ps6 = M.dwgPrimsToSvg(RECT4);
