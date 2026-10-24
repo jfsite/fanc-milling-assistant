@@ -74,7 +74,15 @@ const doGen = args.includes('--gen');
     });
     const fileUrl = 'file:///' + path.join(ROOT, 'app.html').replace(/\\/g, '/');
     await send('Page.navigate', { url: fileUrl });
-    await sleep(2200);
+    // 等导航渲染出来再点：app.html 已 1.4 MB（内嵌 13 张图），固定 2.2s 在慢机器上会抢跑
+    await sleep(1200);
+    for (let i = 0; i < 40; i++) {
+      const ready = await send('Runtime.evaluate', {
+        expression: "!!document.querySelector('#nav button')", returnByValue: true,
+      });
+      if (ready.result?.result?.value === true) break;
+      await sleep(300);
+    }
 
     const clicked = await send('Runtime.evaluate', {
       expression: `(()=>{const b=document.querySelector('#nav button[data-p="${panel}"]');

@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-24 21:59　｜　代码版本：v1.9.2（`app.html` 1.29 MB / 1,320,614 字节，10 个面板，249 项断言）　｜　**已发布上线**（见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
+> 最后更新：2026-10-24 22:20　｜　代码版本：v1.10.0（`app.html` 1.40 MB / 1,399,645 字节，11 个面板，275 项断言）　｜　线上仍是 v1.9.2（v1.10.0 **未发布**，见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
 
 ---
 
@@ -44,7 +44,7 @@
 # 本地预览（改完刷新即可）
 python -m http.server 8765 --bind 127.0.0.1
 
-# 回归测试：194 项断言，必须 0 失败才算完成
+# 回归测试：275 项断言，必须 0 失败才算完成
 node tests/run-tests.js
 
 # 改完文档 / 换完截图后，把内容写回 app.html 的帮助面板
@@ -134,7 +134,7 @@ node tools/release.js                                  # 3. 快照 + tag
 
 ---
 
-## 3. 现状：10 个面板
+## 3. 现状：11 个面板
 
 | # | 面板 | 职责 | 主要实现 |
 |---|---|---|---|
@@ -146,10 +146,11 @@ node tools/release.js                                  # 3. 快照 + tag
 | 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `contourBBox()` `checkDims()` |
 | 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV | `runBatch()` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
-| 9 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序）+ 文字描述生成 | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
-| 10 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
+| 9 | 刀具库 | T 号 / 直径 / 刃数 / 补偿半径一处录入，参数计算·刀轨·图纸三处联动 | `toolNorm()` `toolListNorm()` `toolFindByD()` `toolSummary()` `renderToolLib()` |
+| 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序）+ 文字描述生成 | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
+| 11 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
 
-跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`。
+跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`、刀具库统一取刀（`#c-toolpick` / `#p-toolpick` / `#dw-toolpick` 三个下拉）。
 
 ---
 
@@ -192,7 +193,7 @@ node tools/release.js                                  # 3. 快照 + tag
 2. 加 `<section class="panel" id="panel-xxx">`（放在 AI 面板之前）
 3. 需要样式就加到 `<style>` 末尾
 4. 在 `// ===== 初始化 =====` 之前写逻辑与按钮接线
-5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 194 项）
+5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 275 项）
 6. 更新 `docs/使用说明.md` 并 `node tools/sync-doc.js --embed`
 
 ---
@@ -222,8 +223,9 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：194 项，0 失败。
+7. **测试全绿才算完成**：275 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
+9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
 
 ---
 
@@ -341,7 +343,6 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 | 优先级 | 项 | 说明 | 难度 |
 |---|---|---|---|
 | 高 | 题库 + 自动判分 | 按知识点出题，学生交程序自动判分定位；题目内容需手写 20~30 道 | 中（难在内容） |
-| 高 | 刀具库 | T 号 / 直径 / 刃数 / 半径补偿值，与刀补、参数、刀轨联动，替掉现在手填刀半径 | 中 |
 | 中 | 2D 材料去除 | 毛坯矩形减扫掠区域，看过切/欠切 | 中高 |
 | 中 | 宏程序 → 普通 G 代码展开 | 逐行展开结果，讲宏程序最直观 | 中高 |
 | 中 | G68 旋转作用于轨迹 | 现在只解释文字，图形不转 | 中 |
@@ -400,6 +401,17 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 坑：`irToNC` 重排轮廓时会丢自定义字段，`open` 必须在 map 里显式透传；
 另外 `parseSvgIR` 会丢掉"零高度/零宽度"的退化形状（一条直线），所以开放段不能再走 SVG 解析，要直接造 IR。
 
+## 7.8 刀具库的口径（v1.10.0）
+
+1. **补偿半径 = 机床刀补表里 D 号的那个半径值**，不是刀半径的别名。默认取 `直径/2`，用户可手改（留量、修磨）。
+2. **改直径时只自动跟随"自动值"**：若补偿半径正好等于旧 `D/2`，改直径后自动变成新 `D/2`；已被手改过就不动。
+   （实现见 `toolBody.oninput`，判据 `Math.abs(prevR - prevD/2) < 1e-9`）
+3. **规范化在失焦时做**（`toolClean()`）：补 T 号零、直径非法整行丢弃、同 T 号后者覆盖、上限 20 把。
+   打字过程中只存不重绘，否则会抢焦点。
+4. **三个下拉都留「— 手填 —」且默认选中**：刀具库是便利用具，不是强制数据源，`toolAt('')` 必须返回 `null`（曾差点误取第 0 把）。
+5. **T 号同时是 H 号与 D 号**，与图纸生成的既有口径一致（`G43 H01` / `G41 D01`）。
+6. 存储键 `fanucW.tools`；已并入「清本地保存」的清除范围（`Object.keys(LSK)` 遍历）。
+
 ## 8. 会重复踩的坑
 
 | 坑 | 表现 | 正确做法 |
@@ -417,7 +429,7 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 
 ```
 fanc-milling-app/
-├─ app.html            1.3 MB，应用本体（10 面板 + 内嵌文档 + 12 图）
+├─ app.html            1.4 MB，应用本体（11 面板 + 内嵌文档 + 13 图）
 ├─ index.html          1 KB 入口转发层（永不变，别往里加东西）
 ├─ version.json        当前线上版本，应用用它做版本自检
 ├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
@@ -429,7 +441,7 @@ fanc-milling-app/
 │  ├─ img/               11 张截图（panel-*.png）
 │  ├─ samples/           图纸示例（part-60x40.svg）
 │  └─ history/           历史工作日志
-├─ tests/run-tests.js    194 项断言，Node 直接跑，无需浏览器
+├─ tests/run-tests.js    275 项断言，Node 直接跑，无需浏览器
 ├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步

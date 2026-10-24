@@ -47,7 +47,9 @@ fs.writeFileSync(modPath,
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
      + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
-     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw, dwgOpenIR};');
+     + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw, dwgOpenIR,'
+     + ' toolNorm, toolListNorm, toolRadius, toolDNo, toolSummary, toolFindByD, toolCsv, toolAt, toolSeed, TOOL_SEED,'
+     + ' renderToolLib, renderToolPicks, TOOL_MAX};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -572,6 +574,69 @@ const ir6 = M.parseSvgIR(ps6.svg).ir;
 const nc6 = M.irToNC(ir6, {mat:'45钢', toolD:10, depth:3, ap:1, safeZ:10});
 ok('图元链生成的程序 0 错误',
    M.lintProgram(nc6.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv === 'error').length === 0);
+
+// ===== 12. 刀具库 =====
+console.log('\n--- 12. 刀具库 ---');
+
+// 面板与联动入口确实存在（防止后续重构把面板摘掉）
+ok('刀具库面板已注册', html.indexOf('id="panel-tools"') > 0 && html.indexOf('data-p="tools"') > 0);
+ok('三处选用刀具下拉都在',
+   html.indexOf('id="c-toolpick"') > 0 && html.indexOf('id="p-toolpick"') > 0 && html.indexOf('id="dw-toolpick"') > 0);
+ok('刀具库有独立存储键', html.indexOf("tools:'fanucW.tools'") > 0);
+
+// toolNorm：规范化与兜底
+const tn1 = M.toolNorm({t:'1', d:10, z:4});
+ok('T 号补零 / 半径缺省为 D/2',
+   tn1.t === '01' && tn1.r === 5 && tn1.d === 10 && tn1.z === 4, tn1);
+ok('名称缺省按直径生成', tn1.name === 'Φ10 铣刀', tn1.name);
+const tn2 = M.toolNorm({t:'T07', d:5});
+ok('T 号带字母也认', tn2.t === '07' && tn2.z === 2 && tn2.r === 2.5, tn2);
+ok('T 号越界回落 01', M.toolNorm({t:150, d:5}).t === '01');
+ok('直径非法返回 null',
+   M.toolNorm({t:'01', d:0}) === null && M.toolNorm({t:'01', d:-3}) === null
+   && M.toolNorm({t:'01', d:'abc'}) === null && M.toolNorm(null) === null);
+ok('直径 >200 视为填错', M.toolNorm({t:'01', d:250}) === null);
+ok('补偿半径大于刀半径时回落 D/2', M.toolNorm({t:'01', d:10, r:12}).r === 5);
+ok('刃数下限 2 / 上限 12',
+   M.toolNorm({t:'01', d:10, z:0}).z === 2 && M.toolNorm({t:'01', d:10, z:40}).z === 12);
+
+// toolListNorm：去重 / 掉非法 / 上限
+const ln1 = M.toolListNorm([{t:'01', d:10}, {t:'1', d:12}]);
+ok('同 T 号后者覆盖前者', ln1.length === 1 && ln1[0].d === 12, ln1);
+const ln2 = M.toolListNorm([{t:'01', d:0}, {t:'02', d:8}, 'x', null]);
+ok('非法项被剔除', ln2.length === 1 && ln2[0].t === '02', ln2);
+const many = Array.from({length:25}, (_, i)=>({t:i+1, d:5 + i}));
+ok('刀具库上限 ' + M.TOOL_MAX + ' 把', M.toolListNorm(many).length === M.TOOL_MAX);
+
+// 派生值
+ok('半径 / D 号 / 摘要',
+   M.toolRadius({t:'03', d:6}) === 3 && M.toolDNo({t:'03', d:6}) === 'D03'
+   && M.toolSummary({t:'03', d:6, z:3}) === 'T03 Φ6 3刃 补偿R3',
+   M.toolSummary({t:'03', d:6, z:3}));
+ok('非法刀具半径按 0 处理', M.toolRadius(null) === 0 && M.toolRadius({t:'01', d:-1}) === 0);
+
+// 按直径找刀：0.05mm 内算同一把，超出不硬凑
+const seed = M.TOOL_SEED;
+ok('直径命中 T01', (M.toolFindByD(seed, 10) || {}).t === '01');
+ok('差 0.03 仍算同一把', (M.toolFindByD(seed, 9.97) || {}).t === '01');
+ok('差 0.1 不硬凑', M.toolFindByD(seed, 9.9) === null);
+ok('自定义容差生效', (M.toolFindByD(seed, 9.9, 0.15) || {}).t === '01');
+
+// CSV 导出
+const csv = M.toolCsv(seed).split('\n');
+ok('CSV 表头与行数', csv[0] === 'T号,名称,直径,刃数,补偿半径(D值)' && csv.length === seed.length + 1, csv.length);
+ok('CSV 名称带引号封装', csv[1].indexOf('"Φ10 立铣刀"') > 0, csv[1]);
+ok('CSV 引号转义', M.toolCsv([{t:'01', d:10, name:'带"引号"的刀'}]).split('\n')[1].indexOf('""') > 0);
+
+// 下拉取值：空串必须是"手填"，不能误取第 0 把
+ok('空选择不取刀', M.toolAt('') === null && M.toolAt(null) === null);
+ok('下标越界返回 null', M.toolAt('99') === null);
+M.renderToolLib();
+const opts = store['c-toolpick'].innerHTML;
+ok('三个下拉都按刀具库渲染',
+   (opts.match(/<option/g) || []).length === M.TOOL_SEED.length + 1
+   && store['p-toolpick'].innerHTML.indexOf('T01') > 0
+   && store['dw-toolpick'].innerHTML.indexOf('T01') > 0, opts);
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
