@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.7.2";
+  const APP_VERSION = "1.7.3";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.7.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.7.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4388,6 +4388,83 @@ function parseSvgIR(text){
   return {ok:true, ir:ir, warn:warn};
 }
 
+// --- 折线 → 圆弧拟合（把 SVG 离散掉的圆弧找回来，输出 G02/G03）---
+function dwgFitCircle(pts){
+  // Kasa 代数拟合：解 3x3 线性方程组
+  const n = pts.length;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sx3 = 0, sy3 = 0, sxy2 = 0, sx2y = 0;
+  for(const p of pts){
+    const x = p[0], y = p[1];
+    sx += x; sy += y; sxx += x*x; syy += y*y; sxy += x*y;
+    sx3 += x*x*x; sy3 += y*y*y; sxy2 += x*y*y; sx2y += x*x*y;
+  }
+  const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+  const b = [-(sx3 + sxy2), -(sy3 + sx2y), -(sxx + syy)];
+  // 高斯消元
+  for(let i=0;i<3;i++){
+    let piv = i;
+    for(let r=i+1;r<3;r++) if(Math.abs(A[r][i]) > Math.abs(A[piv][i])) piv = r;
+    if(Math.abs(A[piv][i]) < 1e-12) return null;
+    [A[i], A[piv]] = [A[piv], A[i]]; [b[i], b[piv]] = [b[piv], b[i]];
+    for(let r=0;r<3;r++){
+      if(r === i) continue;
+      const f = A[r][i]/A[i][i];
+      for(let c=i;c<3;c++) A[r][c] -= f*A[i][c];
+      b[r] -= f*b[i];
+    }
+  }
+  const D = b[0]/A[0][0], E = b[1]/A[1][1], F = b[2]/A[2][2];
+  const cx = -D/2, cy = -E/2;
+  const r2 = cx*cx + cy*cy - F;
+  if(!(r2 > 0)) return null;
+  const r = Math.sqrt(r2);
+  let maxErr = 0;
+  for(const p of pts) maxErr = Math.max(maxErr, Math.abs(Math.hypot(p[0]-cx, p[1]-cy) - r));
+  return {cx:cx, cy:cy, r:r, err:maxErr};
+}
+
+// 贪心：从当前点起，逐渐扩大窗口，只要还能用同一段圆弧拟合（误差 ≤ tol）就继续
+function dwgFitArcs(pts, tol, minPts){
+  const T = tol || 0.02, MIN = minPts || 5;
+  const out = [];
+  let i = 0;
+  const N = pts.length;
+  while(i < N-1){
+    let best = null, bestEnd = i+1;
+    for(let j = i + MIN; j <= Math.min(N - 1, i + 80); j++){
+      const win = pts.slice(i, j+1);
+      const fit = dwgFitCircle(win);
+      if(fit && fit.err <= T && fit.r < 5000 && fit.r > 0.2){
+        best = fit; bestEnd = j;
+      } else if(best){
+        break;  // 再扩就崩了，用上一次的
+      }
+    }
+    if(best && bestEnd > i + MIN - 1){
+      const a = pts[i], b2 = pts[bestEnd];
+      // 方向：用窗口内点的有向面积判断
+      let area = 0;
+      for(let k=i;k<bestEnd;k++) area += pts[k][0]*pts[k+1][1] - pts[k+1][0]*pts[k][1];
+      // 整圈：首尾重合时补一段完整圆
+      const ccw = area > 0;
+      out.push({kind:'arc', x1:a[0], y1:a[1], x2:b2[0], y2:b2[1],
+                cx:best.cx, cy:best.cy, r:best.r, ccw:ccw});
+      i = bestEnd;
+    } else {
+      const a = pts[i], b2 = pts[i+1];
+      out.push({kind:'line', x1:a[0], y1:a[1], x2:b2[0], y2:b2[1]});
+      i++;
+    }
+  }
+  if(i === N-1 && out.length){
+    const last = out[out.length-1], p = pts[N-1];
+    if(last.kind === 'line' && Math.hypot(last.x2-p[0], last.y2-p[1]) > 1e-9){
+      out.push({kind:'line', x1:last.x2, y1:last.y2, x2:p[0], y2:p[1]});
+    }
+  }
+  return out;
+}
+
 // --- IR → FANUC 程序 ---
 function dwgTopIdx(pts){
   let k = 0;
@@ -4463,7 +4540,22 @@ function irToNC(ir, opt){
       push('G00 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
       push('G01 Z-' + f2(z) + ' F' + plungeF);
       push('G41 D' + T + ' X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]) + ' F' + feed);
-      for(let i=1;i<pts.length;i++) push('G01 X' + f2(pts[i][0]) + ' Y' + f2(pts[i][1]));
+      // 能拟合成圆弧的就出 G02/G03，剩下的走 G01
+      const segs = (o.noArc || pts.length < 6) ? null : dwgFitArcs(pts, o.arcTol || 0.02);
+      if(segs && segs.length && segs.filter(x=>x.kind === 'arc').length){
+        segs.forEach(sg=>{
+          if(sg.kind === 'line'){
+            push('G01 X' + f2(sg.x2) + ' Y' + f2(sg.y2));
+          } else {
+            const I = sg.cx - sg.x1, J = sg.cy - sg.y1;
+            push((sg.ccw ? 'G03' : 'G02') + ' X' + f2(sg.x2) + ' Y' + f2(sg.y2)
+              + ' I' + f2(I) + ' J' + f2(J));
+          }
+        });
+      } else {
+        for(let i=1;i<pts.length;i++) push('G01 X' + f2(pts[i][0]) + ' Y' + f2(pts[i][1]));
+      }
+      const lastP = pts[pts.length-1];
       push('G01 X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]));
       push('G40 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
     }
@@ -4860,7 +4952,9 @@ async function dwgRasterToPrims(file){
         const k = Math.min(1, max/Math.max(img.width, img.height));
         const cv = document.createElement('canvas');
         cv.width = Math.round(img.width*k); cv.height = Math.round(img.height*k);
-        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        const cx2 = cv.getContext('2d');
+        cx2.fillStyle = '#fff'; cx2.fillRect(0, 0, cv.width, cv.height);  // 透明底 PNG 不补白会变全黑
+        cx2.drawImage(img, 0, 0, cv.width, cv.height);
         res(cv.toDataURL('image/jpeg', 0.9));
       };
       img.src = fr.result;

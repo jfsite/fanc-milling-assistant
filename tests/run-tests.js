@@ -46,7 +46,7 @@ fs.writeFileSync(modPath,
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
-     + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck};');
+     + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck, dwgFitCircle, dwgFitArcs};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -490,6 +490,33 @@ const irRect = {size:{w:80,h:40}};
 ok('标注 80 与外形相符时不告警', M.dwgDimsCheck(irRect, [{text:'80',value:80}]).length === 0);
 ok('标注 60 与外形不符时告警', M.dwgDimsCheck(irRect, [{text:'60',value:60}]).some(x=>x.code === 'S03'));
 ok('明显是别的尺寸（R100）不打扰', M.dwgDimsCheck(irRect, [{text:'R100',value:100}]).length === 0);
+
+// --- 13. 折线 → 圆弧拟合 ---
+const circlePts = (cx, cy, r, n)=>{
+  const out = [];
+  for(let i=0;i<n;i++){ const a = 2*Math.PI*i/n; out.push([cx + r*Math.cos(a), cy + r*Math.sin(a)]); }
+  return out;
+};
+const fitC = M.dwgFitCircle(circlePts(0, 0, 20, 40));
+ok('圆拟合出正确半径', fitC && near(fitC.r, 20, 0.01), fitC && fitC.r);
+ok('圆拟合残差极小', fitC && fitC.err < 0.01, fitC && fitC.err);
+
+const segC = M.dwgFitArcs(circlePts(0, 0, 20, 60), 0.02);
+ok('整圆拟合为 1 段圆弧', segC.length === 1 && segC[0].kind === 'arc', segC.map(s=>s.kind));
+ok('拟合半径正确', segC[0] && near(segC[0].r, 20, 0.05), segC[0] && segC[0].r);
+
+const segSq = M.dwgFitArcs([[0,0],[40,0],[40,40],[0,40],[0,0]], 0.02);
+ok('方形全判为直线', segSq.every(s=>s.kind === 'line'), segSq.map(s=>s.kind));
+
+// 用圆的轮廓生成程序：应出现 G02/G03，而不是几十个 G01
+const irCircle = {contours:[{role:'outer', pts:circlePts(50, 50, 20, 60), closed:true}], holes:[], size:{w:40,h:40}};
+const ncC = M.irToNC(irCircle, {mat:'45钢', toolD:10, depth:2, ap:1, safeZ:10});
+ok('圆轮廓输出 G02/G03', /G0[23] /.test(ncC.code), ncC.code.slice(0, 200));
+ok('圆轮廓不再是一堆 G01', (ncC.code.match(/G01 X/g)||[]).length < 10, (ncC.code.match(/G01 X/g)||[]).length);
+ok('圆弧用 I/J 表示', /G0[23] X[\d.-]+ Y[\d.-]+ I-?[\d.]+ J-?[\d.]+/.test(ncC.code), ncC.code.split('\n').filter(l=>/G0[23] /.test(l)).slice(0,2));
+ok('拟合后的程序仍 0 错误',
+   M.lintProgram(ncC.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv === 'error').length === 0,
+   M.lintProgram(ncC.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv==='error'));
 
 // 生成结果仍要能过 43 条校验
 const ps6 = M.dwgPrimsToSvg(RECT4);
