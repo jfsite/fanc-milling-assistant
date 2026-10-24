@@ -5,6 +5,8 @@
  * 用法：
  *   node tools/shoot-panel.js template               # 截「程序编辑器」→ docs/img/panel-template.png
  *   node tools/shoot-panel.js help --out docs/img/panel-help.png
+ *   node tools/shoot-panel.js ai --svg docs/samples/part-60x40.svg --gen
+ *        # 先上传示例图纸并点「生成程序」，再截带结果的画面
  *
  * 流程：无头 Edge 打开本地 index.html → 点对应导航 → 全页截图 → Pillow 缩到 1000 宽 + 128 色量化
  * （与既有 11 张配图规格一致）。截图后记得跑 node tools/sync-doc.js --embed 写回应用。
@@ -18,7 +20,7 @@ const path = require('node:path');
 const ROOT = path.dirname(__dirname);
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const PY = 'C:\\Users\\wzp\\.workbuddy\\binaries\\python\\versions\\3.13.12\\python.exe';
-const PORT = 9337;
+const PORT = 9400 + Math.floor(Math.random()*400); // 随机端口，避免上次未退出的实例占坑
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const args = process.argv.slice(2);
@@ -29,6 +31,9 @@ if (!panel) {
 }
 const outIdx = args.indexOf('--out');
 const out = outIdx > -1 ? args[outIdx + 1] : path.join('docs', 'img', `panel-${panel}.png`);
+const svgIdx = args.indexOf('--svg');
+const svgPath = svgIdx > -1 ? path.resolve(args[svgIdx + 1]) : null;
+const doGen = args.includes('--gen');
 
 (async () => {
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-shot-'));
@@ -78,6 +83,26 @@ const out = outIdx > -1 ? args[outIdx + 1] : path.join('docs', 'img', `panel-${p
     });
     if (clicked.result?.result?.value !== 'ok') throw new Error('找不到导航项 data-p=' + panel);
     await sleep(900); // 等画布 / 帮助面板懒加载
+
+    if (svgPath) {
+      await send('DOM.enable');
+      const doc = await send('DOM.getDocument', { depth: -1 });
+      const q = await send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: '#dwg-file' });
+      await send('DOM.setFileInputFiles', { files: [svgPath], nodeId: q.result.nodeId });
+      for (let i = 0; i < 40; i++) {
+        const r = await send('Runtime.evaluate', {
+          expression: "document.getElementById('btn-dwg-gen') && !document.getElementById('btn-dwg-gen').disabled",
+          returnByValue: true,
+        });
+        if (r.result.result.value === true) break;
+        await sleep(300);
+      }
+      if (doGen) {
+        await send('Runtime.evaluate', { expression: "document.getElementById('btn-dwg-gen').click()" });
+        await sleep(900);
+      }
+    }
+    await sleep(300);
 
     const shot = await send('Page.captureScreenshot', {
       format: 'png', captureBeyondViewport: true,

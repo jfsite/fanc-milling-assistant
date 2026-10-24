@@ -44,7 +44,8 @@ fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
      + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
-     + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS};');
+     + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
+     + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -325,6 +326,87 @@ ok('页面徽标跟随 APP_VERSION',
    store['app-ver'] && store['app-ver'].textContent === 'v' + APP_VER, store['app-ver'] && store['app-ver'].textContent);
 ok('应用内帮助的 md 块同一版本',
    new RegExp('> 版本 v' + String(APP_VER).replace(/\./g, '\\.')).test(html));
+
+
+console.log('--- 11. 图纸 → 轮廓 → 程序 ---');
+const SVG_SQUARE = '<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="50mm" viewBox="0 0 50 50"><rect x="0" y="0" width="50" height="50" fill="none" stroke="#000"/></svg>';
+const DR1 = M.parseSvgIR(SVG_SQUARE);
+ok('SVG 方形解析成功', DR1.ok === true, DR1.error);
+ok('SVG 方形尺寸 50×50', DR1.ok && near(DR1.ir.size.w, 50, 1e-6) && near(DR1.ir.size.h, 50, 1e-6), DR1.ok && DR1.ir.size);
+ok('SVG 方形 1 条外轮廓', DR1.ok && DR1.ir.contours.length === 1 && DR1.ir.contours[0].role === 'outer');
+
+const SVG_HOLE = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">'
+  + '<rect x="0" y="0" width="100" height="60"/><circle cx="20" cy="30" r="5"/><circle cx="80" cy="30" r="4"/></svg>';
+const DR2 = M.parseSvgIR(SVG_HOLE);
+ok('矩形 + 2 孔：1 轮廓 2 孔', DR2.ok && DR2.ir.contours.length === 1 && DR2.ir.holes.length === 2);
+ok('孔径按直径记录', DR2.ok && near(DR2.ir.holes[0].d, 10, 1e-6), DR2.ok && DR2.ir.holes);
+
+// 大圆应当被当成外轮廓，而不是孔
+const SVG_ROUND = '<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="40mm" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20"/></svg>';
+const DR3 = M.parseSvgIR(SVG_ROUND);
+ok('整圆零件识别为外轮廓', DR3.ok && DR3.ir.contours.length === 1 && DR3.ir.holes.length === 0);
+
+// 含 group transform 的图：外框 0..20 平移 10 后仍在原点归一化
+const SVG_G = '<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="40mm" viewBox="0 0 40 40">'
+  + '<g transform="translate(10 10)"><rect x="0" y="0" width="20" height="20"/></g></svg>';
+const DR4 = M.parseSvgIR(SVG_G);
+ok('g transform 生效且归一化', DR4.ok && near(DR4.ir.size.w, 20, 1e-6) && near(DR4.ir.size.h, 20, 1e-6), DR4.ok && DR4.ir.size);
+
+// 无单位：按 96dpi 折算并给出警告
+const SVG_PX = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96"/></svg>';
+const DR5 = M.parseSvgIR(SVG_PX);
+ok('px 图纸按 96dpi 折算为 25.4mm', DR5.ok && near(DR5.ir.size.w, 25.4, 1e-6), DR5.ok && DR5.ir.size);
+
+// 路径：M + 弧 A（半圆），应离散成多点
+const DPOLYS = M.dwgPathPolys('M0 0 A10 10 0 0 1 20 0 Z', 0.05);
+ok('path 弧段被离散', DPOLYS.length === 1 && DPOLYS[0].length > 6, DPOLYS.length && DPOLYS[0].length);
+ok('path 闭合回到起点', DPOLYS.length === 1 && near(DPOLYS[0][0][0], DPOLYS[0][DPOLYS[0].length-1][0], 1e-6));
+
+// 解析失败要给明确原因
+ok('空内容报错', M.parseSvgIR('').ok === false);
+ok('非 SVG 报错', M.parseSvgIR('<html><body>x</body></html>').ok === false);
+ok('无图元报错', M.parseSvgIR('<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm"></svg>').ok === false);
+
+// --- 程序生成 ---
+const DOPT = {mat:'45钢', toolNo:'01', toolD:10, flutes:2, ap:1, depth:3, safeZ:10, holeCycle:'auto'};
+const DG1 = M.irToNC(DR1.ir, DOPT);
+const DCODE1 = DG1.code;
+ok('生成程序有程序号与 M30', /^O1001/m.test(DCODE1) && /M30/.test(DCODE1));
+ok('生成程序有刀补建立与取消', /G41 D01/.test(DCODE1) && /G40/.test(DCODE1));
+ok('深度 3 / ap 1 = 3 层', DG1.meta.nPass === 3 && (DCODE1.match(/OUTER PASS/g) || []).length === 3);
+ok('主轴与进给已算出', DG1.meta.sp > 0 && DG1.meta.feed > 0, DG1.meta);
+ok('含安全高度与回参考点', /G00 Z10/.test(DCODE1) && /G91 G28 Z0/.test(DCODE1));
+ok('外轮廓从最高点切入（Y=50）', new RegExp('G41 D01 X[\\d.]+ Y50').test(DCODE1), DCODE1.split('\n').filter(l=>/G41/.test(l)));
+
+// 方向：外轮廓必须为顺时针（G41 + 顺铣），用 y 递减段验证第一个角点
+const DG2 = M.irToNC({contours:[{role:'outer', pts:[[0,0],[50,0],[50,50],[0,50]], closed:true}], holes:[], size:{w:50,h:50}}, DOPT);
+const DPTS2 = (DG2.code.match(/G41 D01 X([\d.]+) Y([\d.]+)/) || []).slice(1).map(Number);
+ok('逆时针输入被翻转为顺时针起点', near(DPTS2[1], 50, 1e-6), DPTS2);
+
+// 孔：直径匹配走 G81；不匹配走铣圆 G02
+const DG3 = M.irToNC(DR2.ir, Object.assign({}, DOPT, {toolD:10}));
+ok('Ø10 孔匹配刀具走 G81、Ø8 孔改用铣圆', /G81/.test(DG3.code) && /G02 X[\d.]+ Y[\d.]+ I-4/.test(DG3.code), DG3.code.match(/G8[01][^\n]*|G02 X[^\n]*/g));
+const DG4 = M.irToNC(DR2.ir, Object.assign({}, DOPT, {toolD:10, holeCycle:'mill'}));
+ok('强制铣圆时出现整圆 G02 I-J', /G02 X[\d.]+ Y[\d.]+ I-/.test(DG4.code));
+
+// --- 可加工性检查 ---
+const DCHK = {toolD:10, blankW:200, blankH:200};
+ok('正常图纸无错误', M.dwgCheck(DR2.ir, DCHK).filter(x=>x.lv==='error').length === 0);
+const DNARROW = {contours:[{role:'inner', pts:[[0,0],[4,0],[4,40],[0,40]], closed:true}], holes:[], size:{w:4,h:40}};
+ok('内轮廓窄于刀具报 D03', M.dwgCheck(DNARROW, DCHK).some(x=>x.code === 'D03' && x.lv === 'error'));
+ok('无轮廓报 D01', M.dwgCheck({contours:[], holes:[]}, DCHK).some(x=>x.code === 'D01'));
+ok('超毛坯报 D05', M.dwgCheck(DR2.ir, {toolD:10, blankW:50, blankH:50}).some(x=>x.code === 'D05'));
+
+// --- 生成结果必须能过自己的校验器 ---
+const DLR = M.lintProgram(DCODE1, {pitch:1.5, nmax:8000});
+ok('生成的程序 0 错误', DLR.issues.filter(x=>x.lv === 'error').length === 0, DLR.issues.filter(x=>x.lv==='error'));
+const DLR4 = M.lintProgram(DG4.code, {pitch:1.5, nmax:8000});
+ok('铣圆版本 0 错误', DLR4.issues.filter(x=>x.lv === 'error').length === 0, DLR4.issues.filter(x=>x.lv==='error'));
+
+// --- 模型回复 JSON 抽取 ---
+ok('围栏 JSON 可解析', (M.dwgExtractJson('```json\n{"a":1}\n```') || {}).a === 1);
+ok('夹在文字里也能解析', (M.dwgExtractJson('结果如下 {"a":2} 完毕') || {}).a === 2);
+ok('非法 JSON 返回 null', M.dwgExtractJson('抱歉，我无法识别') === null);
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-23 23:58　｜　代码版本：v1.5.1（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+> 最后更新：2026-10-23 23:58　｜　代码版本：v1.6.0（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
 
 ---
 
@@ -22,7 +22,7 @@
 # 本地预览（改完刷新即可）
 python -m http.server 8765 --bind 127.0.0.1
 
-# 回归测试：163 项断言，必须 0 失败才算完成
+# 回归测试：194 项断言，必须 0 失败才算完成
 node tests/run-tests.js
 
 # 改完文档 / 换完截图后，把内容写回 index.html 的帮助面板
@@ -123,7 +123,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `contourBBox()` `checkDims()` |
 | 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV | `runBatch()` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
-| 9 | AI 生成程序 | 云端 LLM 流式生成 | `initCloud()` `aiGenerate()` |
+| 9 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序）+ 文字描述生成 | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
 | 10 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
 
 跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`。
@@ -169,10 +169,23 @@ node tools/release.js                                  # 3. 快照 + tag
 2. 加 `<section class="panel" id="panel-xxx">`（放在 AI 面板之前）
 3. 需要样式就加到 `<style>` 末尾
 4. 在 `// ===== 初始化 =====` 之前写逻辑与按钮接线
-5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 163 项）
+5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 194 项）
 6. 更新 `docs/使用说明.md` 并 `node tools/sync-doc.js --embed`
 
 ---
+
+## 4.5 图纸生成器的固定口径（v1.6.0）
+
+改 `irToNC()` 之前先看这几条，它们是教学口径，不是随手定的：
+
+1. **一律用 G41 + D 号按轮廓编程**，不让本地代码做多边形偏置（偏置遇自交就崩），半径交给刀补。
+2. **外轮廓顺时针、内轮廓逆时针**，配合 G41 都是顺铣；输入方向反了会被 `dwgArea` 判向翻转。
+3. **切入点在轮廓最高点**：外轮廓从上方 (R+2) 处切入，内轮廓沿"最高点 → 形心"方向切入。
+4. **层数按 ⌈总深/ap⌉ 均分**，各层等深，最后一层不留余量（教学上先说清，再讲精加工）。
+5. **注释全用 ASCII**（`(CONTOUR 1 OUTER PASS 2/3 Z-2)`），中文括号在部分 FANUC 系统上会报警。
+6. **孔按直径逐个判断**：|孔径−刀具直径| ≤ max(0.3, 8%·D) 才用 G81，否则用当前刀具铣整圆 `G02 I- J0`。
+7. **圆孔直径取真实半径**，禁止用离散后的多边形包围盒凑数（内接多边形会小 1~2%，钻头下不去）。
+8. 生成的程序必须能过自己的 43 条校验：测试里有 `lintProgram(生成的程序)` 0 错误断言，改生成器后先跑这条。
 
 ## 5. 必须守住的约定
 
@@ -186,7 +199,7 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：163 项，0 失败。
+7. **测试全绿才算完成**：194 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 
 ---
@@ -327,8 +340,9 @@ fanc-milling-app/
 ├─ docs/
 │  ├─ 使用说明.md         918 行，文档唯一手改处
 │  ├─ img/               11 张截图（panel-*.png）
+│  ├─ samples/           图纸示例（part-60x40.svg）
 │  └─ history/           历史工作日志
-├─ tests/run-tests.js    163 项断言，Node 直接跑，无需浏览器
+├─ tests/run-tests.js    194 项断言，Node 直接跑，无需浏览器
 ├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
