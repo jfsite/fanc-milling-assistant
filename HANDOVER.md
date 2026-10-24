@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-23 23:58　｜　代码版本：v1.6.1（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+> 最后更新：2026-10-23 23:58　｜　代码版本：v1.6.2（`app.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
 
 ---
 
@@ -10,11 +10,25 @@
 
 《数控铣削编程与加工（FANUC系统）》配套的教学工具，面向江苏联合职业技术学院惠山中专办学点 522142 / 522143 班。
 
-- **形态**：单个 `index.html`，零构建、零依赖，双击即用（仅「AI 生成程序」需要联网）
+- **形态**：应用本体是一个 `app.html`（零构建、零依赖，双击即用；AI 与位图识别需联网），外面套一个 1 KB 的 `index.html` 做入口转发（见 §1.5）
 - **用途**：教师上课演示、作业批量批改、学生自查与练习
 - **自包含**：说明文档与 11 张截图都以 base64 内嵌，拷一个文件到任何电脑都能完整使用
 
 ---
+
+## 1.5 目录里为什么有两个 HTML（v1.6.2 起）
+
+| 文件 | 大小 | 会不会变 | 作用 |
+|---|---|---|---|
+| `index.html` | 1 KB | **永不变** | 入口：把 `?sharecode=…` 原样转给 `app.html` |
+| `app.html` | ~940 KB | 每次发版都变 | 应用本体 |
+
+原因：平台边缘缓存按**完整 URL** 长期缓存，根路径一旦缓住旧副本，重新发布也刷不掉（实测 `EO-Cache-Status: HIT`、`Age` 上千秒仍在命中，`Cache-Control: no-cache` 也不被遵守）。
+把「会变的东西」挪到 `app.html` 后，入口那 1 KB 即使被缓存旧了也无害（它本来就只做转发），链接永远不用换。
+
+**对外分发的固定链接**：`https://fanuc-milling-w.app.workbuddy.host/app.html?sharecode=OTD3JQJQPI`
+
+兜底：应用加载后会比对 `version.json`（30 分钟一次，带 `?ts=` 绕缓存），发现线上版本更高就在右下角弹「线上已更新到 vX · 刷新到新版」，点击用 `?_=<时间戳>` 跳转——即使某个节点的 `app.html` 缓存顽固，用户也能一键自愈。
 
 ## 2. 常用命令
 
@@ -25,10 +39,10 @@ python -m http.server 8765 --bind 127.0.0.1
 # 回归测试：194 项断言，必须 0 失败才算完成
 node tests/run-tests.js
 
-# 改完文档 / 换完截图后，把内容写回 index.html 的帮助面板
+# 改完文档 / 换完截图后，把内容写回 app.html 的帮助面板
 node tools/sync-doc.js --embed
 
-# 版本号：查看一致性 / 递增（自动同步 index.html + 使用说明 + HANDOVER + CHANGELOG + 帮助面板）
+# 版本号：查看一致性 / 递增（自动同步 app.html + 使用说明 + HANDOVER + CHANGELOG + 帮助面板）
 node tools/version.js
 node tools/version.js --bump minor
 
@@ -49,13 +63,13 @@ node tools/smoke-ai.js "https://fanuc-milling-w.app.workbuddy.host/?sharecode=OT
 
 ## 2.5 版本号：单一数据源 + 自动同步
 
-**唯一能手改的地方**：`index.html` 第 10 行 `const APP_VERSION = "1.5.0";`
+**唯一能手改的地方**：`app.html` 第 10 行 `const APP_VERSION = "1.5.0";`
 
 页面徽标（`#app-ver`）、标签页标题、导出讲义落款都在运行时从它取；文档侧由脚本写：
 
 | 位置 | 写法 | 谁写 |
 |---|---|---|
-| `index.html` | `const APP_VERSION = "x.y.z"` | **手改（唯一源）** |
+| `app.html` | `const APP_VERSION = "x.y.z"` | **手改（唯一源）** |
 | `docs/使用说明.md` | `> 版本 vx.y.z ｜ …` | `version --bump` |
 | `HANDOVER.md` | `代码版本：vx.y.z` | `version --bump` |
 | `CHANGELOG.md` | `## [x.y.z] — 日期` | `version --bump`（插入空条目，内容手补） |
@@ -83,7 +97,7 @@ node tools/version.js --set 2.0.0              # 直接指定
 
 | 资产 | 位置 | 用途 |
 |---|---|---|
-| git tag | `v1.0.0` `v1.4.0` `v1.4.1` `v1.5.0` … | 代码级回溯，`git show <tag>:index.html` 精确取出 |
+| git tag | `v1.0.0` … `v1.6.2` | 代码级回溯，`git show <tag>:app.html` 精确取出（v1.6.1 及更早是 `index.html`） |
 | 单文件快照 | `releases/v1.5.0.html` 等 | 直接拷给学生 / 拷 U 盘 / 存档，不依赖 git |
 
 ```bash
@@ -91,7 +105,8 @@ node tools/version.js --set 2.0.0              # 直接指定
 node tools/release.js --list
 
 # 回滚到 v1.4.0（先备份当前？当前版已由 v1.5.0 快照与 tag 覆盖，不必另存）
-git show v1.4.0:index.html > index.html
+git show v1.6.2:app.html > app.html          # v1.6.2 起应用在 app.html
+git show v1.4.0:index.html > index.html      # 更早的 tag 仍是 index.html
 node tests/run-tests.js          # 确认该版本自身是好的（应为 157 项全过）
 # 然后让助手发布一次
 ```
@@ -132,7 +147,7 @@ node tools/release.js                                  # 3. 快照 + tag
 
 ## 4. 代码结构
 
-`index.html` 里按顺序有三个脚本块，**顺序不能乱**：
+`app.html` 里按顺序有三个脚本块，**顺序不能乱**：
 
 ```html
 <script type="application/json" id="help-img">{...}</script>   <!-- 11 张图的 base64，由 sync-doc 生成 -->
@@ -191,7 +206,7 @@ node tools/release.js                                  # 3. 快照 + tag
 
 这些是踩过坑之后定下来的，改动前先看：
 
-1. **文档单一数据源**：`docs/使用说明.md` 是唯一手改的地方，`index.html` 里的 `help-md` / `help-img` 块由 `sync-doc --embed` 生成，**不要手改那两个 script 块**。
+1. **文档单一数据源**：`docs/使用说明.md` 是唯一手改的地方，`app.html` 里的 `help-md` / `help-img` 块由 `sync-doc --embed` 生成，**不要手改那两个 script 块**。
 2. **刀补偏置是示意，不是仿真**：偏移按段自身法向 + 拐点角平分线；**建立刀补那一段的起点保持编程点**；**G40 段不做偏置**（所以橙线与蓝线角点差一个刀半径是正常的）。界面上必须保留「示意」字样。
 3. **包围盒有两种口径**，不要混：
    - 指标卡「包围盒（含进刀）」= `res.bbox`，所有轨迹
@@ -214,7 +229,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 分享链接（对外分发用这个） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI&v=1.6.0` |
 | 裸链接（会命中旧缓存，别发） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
 | 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
-| 线上内容（v1.6.0） | 958,555 字节 = 本地 `index.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版） · v1.6.0」 |
+| 线上内容（v1.6.0） | 958,555 字节 = 本地 `app.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版） · v1.6.0」 |
 | 二维码 | `qrcode.png`（492×630）编码 **带 `&v=` 的链接**，由 `tools/make-qrcode.py` 按当前版本自动生成 |
 
 **注意：链接必须带 `?sharecode=OTD3JQJQPI`**，且**对外分发要再带 `&v=<版本>`**。原因见下。
@@ -226,7 +241,7 @@ node tools/release.js                                  # 3. 快照 + tag
 - **`Cache-Control: no-cache` 请求头不被遵守，Ctrl+F5 也无效**（曾经误判为"硬刷新可绕过"）。全新浏览器配置同样拿到旧版，所以这不是客户端缓存。
 - 判定方法：`curl -s -D - -o /dev/null "<链接>" | grep -i "EO-Cache-Status\|Last-Modified"`，HIT + 旧时间戳即为缓存命中。
 - **规矩**：发布后验证一律加 `&cb=随机`；对外发的链接一律用 `&v=<APP_VERSION>`。
-- `tools/make-qrcode.py` 已自动读取 `index.html` 的 `APP_VERSION` 并追加 `&v`，所以每次发版只需重跑一次二维码脚本。
+- `tools/make-qrcode.py` 已自动读取 `app.html` 的 `APP_VERSION` 并追加 `&v`，所以每次发版只需重跑一次二维码脚本。
 
 裸域名 `https://fanuc-milling-w.app.workbuddy.host/` 不带 sharecode 时返回 403。
 
@@ -234,8 +249,8 @@ node tools/release.js                                  # 3. 快照 + tag
 
 | 检查点 | 结果 |
 |---|---|
-| `index.html` 里旧域名 / 旧 appId / 旧 key | **0 处**（`grep -c` 为 0） |
-| `index.html` 出现的 `workbuddy` 域名 | 只有 2 个：新发布域名 + 统一 OAuth Relay |
+| `app.html` 里旧域名 / 旧 appId / 旧 key | **0 处**（`grep -c` 为 0） |
+| `app.html` 出现的 `workbuddy` 域名 | 只有 2 个：新发布域名 + 统一 OAuth Relay |
 | `tools/` `tests/` 里旧标识 | 0 处 |
 | `.workbuddy/applications.yaml` | 只登记 `wbapp_5TAJvvE8eVrSjSP13oJroH` |
 | `.wbapp_*.genie` | 只有新应用一个 marker，`localDir` 指向本目录 |
@@ -250,7 +265,7 @@ node tools/release.js                                  # 3. 快照 + tag
 workbuddy_sites_deploy
   directory = D:\WorkBuddy\fanc-milling-app
   language  = static
-  entryHtml = index.html
+  entryHtml = app.html
   appName   = FANUC铣削编程助手
   domainPrefix = fanuc-milling-w
 ```
@@ -269,7 +284,7 @@ workbuddy_sites_deploy
 
 ### AI 面板：已修复（云服务已绑定新域名）
 
-`index.html` 第 9–13 行的 `__CLOUD_CONFIG__` 已换成本应用自己的云服务配置：
+`app.html` 第 9–13 行的 `__CLOUD_CONFIG__` 已换成本应用自己的云服务配置：
 
 ```js
 const __CLOUD_CONFIG__ = {
@@ -344,7 +359,9 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 
 ```
 fanc-milling-app/
-├─ index.html            858 KB，应用本体（10 面板 + 内嵌文档 + 11 图）
+├─ app.html            ~940 KB，应用本体（10 面板 + 内嵌文档 + 11 图）
+├─ index.html          1 KB 入口转发层（永不变，别往里加东西）
+├─ version.json        当前线上版本，应用用它做版本自检
 ├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
 ├─ CHANGELOG.md          版本更新日志（tools/version.js 维护）
 ├─ HANDOVER.md           本文

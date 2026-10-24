@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 版本号工具 —— 唯一数据源是 index.html 里的 `const APP_VERSION`。
+ * 版本号工具 —— 唯一数据源是 app.html 里的 `const APP_VERSION`。
  *
  * 用法：
  *   node tools/version.js                      查看当前版本 + 各处是否一致
@@ -10,7 +10,7 @@
  *   node tools/version.js --set 1.7.3          直接指定
  *
  * 改版本时会自动同步：
- *   index.html   const APP_VERSION
+ *   app.html     const APP_VERSION
  *   docs/使用说明.md  「> 版本 vX.Y.Z」
  *   HANDOVER.md  「代码版本：vX.Y.Z」
  *   CHANGELOG.md 顶部插入新条目（已存在则跳过）
@@ -24,7 +24,7 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.dirname(__dirname);
 const P = {
-  html: path.join(ROOT, 'index.html'),
+  html: path.join(ROOT, 'app.html'),
   doc: path.join(ROOT, 'docs', '使用说明.md'),
   handover: path.join(ROOT, 'HANDOVER.md'),
   changelog: path.join(ROOT, 'CHANGELOG.md'),
@@ -46,7 +46,7 @@ function read(file) {
 function current() {
   const m = RE.html.exec(read(P.html) || '');
   // 命名组不统一（有的两组、changelog 一组），版本号恒为最后一个捕获组
-  if (!m) throw new Error('index.html 里找不到 const APP_VERSION = "x.y.z";');
+  if (!m) throw new Error('app.html 里找不到 const APP_VERSION = "x.y.z";');
   return m[m.length - 1];
 }
 
@@ -97,7 +97,7 @@ function insertChangelog(next, note) {
 function report() {
   const cur = current();
   const rows = [
-    ['index.html', RE.html, P.html],
+    ['app.html', RE.html, P.html],
     ['docs/使用说明.md', RE.doc, P.doc],
     ['HANDOVER.md', RE.handover, P.handover],
     ['CHANGELOG.md', RE.changelog, P.changelog],
@@ -107,7 +107,7 @@ function report() {
     return { name, found: m ? m[m.length - 1] : null, ok: m ? m[m.length - 1] === cur : false };
   });
 
-  console.log('当前版本 index.html: v' + cur);
+  console.log('当前版本 app.html: v' + cur);
   for (const r of rows) {
     const mark = r.found == null ? '✗ 无记录' : r.ok ? '✓ 一致' : '✗ ' + r.found;
     console.log(`  ${r.name.padEnd(20)} ${mark}`);

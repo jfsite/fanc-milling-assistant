@@ -15,7 +15,8 @@
  * 版本快照必须对应一个确定的提交，不能混着半成品。
  *
  * 回滚某一版（链接不变，覆盖式重新发布）：
- *   git show v1.4.0:index.html > index.html
+ *   git show v1.6.2:app.html > app.html      （v1.6.2 起应用在 app.html）
+ *   git show v1.4.0:index.html > index.html  （更早的版本仍是 index.html）
  *   node tests/run-tests.js && 发布
  */
 
@@ -36,9 +37,9 @@ function git(args, opts) {
 }
 
 function version() {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8');
   const m = /const APP_VERSION = "(\d+\.\d+\.\d+)";/.exec(html);
-  if (!m) throw new Error('index.html 里找不到 APP_VERSION');
+  if (!m) throw new Error('app.html 里找不到 APP_VERSION');
   return m[1];
 }
 
@@ -100,7 +101,7 @@ function list() {
     try { when = git(['log', '-1', '--format=%ad', '--date=short', t]).trim(); } catch (_) {}
     console.log(`  ${t.padEnd(10)} ${when.padEnd(12)} ${size}`);
   }
-  console.log('\n回滚某版：git show <tag>:index.html > index.html   （快照文件在 releases/<tag>.html）');
+  console.log('\n回滚某版：git show <tag>:app.html > app.html  （v1.6.2 起；更早的 tag 用 index.html，快照在 releases/<tag>.html）');
 }
 
 function main() {
@@ -135,7 +136,7 @@ function main() {
 
   step('写快照', () => {
     fs.mkdirSync(SHOT_DIR, { recursive: true });
-    fs.copyFileSync(path.join(ROOT, 'index.html'), shot);
+    fs.copyFileSync(path.join(ROOT, 'app.html'), shot);
     return `releases/${tag}.html（${(fs.statSync(shot).size / 1024).toFixed(0)} KB）`;
   });
 

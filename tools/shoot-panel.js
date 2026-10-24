@@ -8,7 +8,7 @@
  *   node tools/shoot-panel.js ai --svg docs/samples/part-60x40.svg --gen
  *        # 先上传示例图纸并点「生成程序」，再截带结果的画面
  *
- * 流程：无头 Edge 打开本地 index.html → 点对应导航 → 全页截图 → Pillow 缩到 1000 宽 + 128 色量化
+ * 流程：无头 Edge 打开本地 app.html → 点对应导航 → 全页截图 → Pillow 缩到 1000 宽 + 128 色量化
  * （与既有 11 张配图规格一致）。截图后记得跑 node tools/sync-doc.js --embed 写回应用。
  */
 
@@ -72,7 +72,7 @@ const doGen = args.includes('--gen');
     await send('Emulation.setDeviceMetricsOverride', {
       width: 1440, height: 900, deviceScaleFactor: 2, mobile: false,
     });
-    const fileUrl = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/');
+    const fileUrl = 'file:///' + path.join(ROOT, 'app.html').replace(/\\/g, '/');
     await send('Page.navigate', { url: fileUrl });
     await sleep(2200);
 

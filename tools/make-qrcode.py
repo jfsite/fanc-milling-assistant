@@ -4,8 +4,8 @@
 用法：
     python tools/make-qrcode.py "https://xxx.app.workbuddy.host/?sharecode=XXXX"
 
-会自动把 index.html 里的 APP_VERSION 追加成 `&v=<版本>` —— 平台边缘缓存按
-「完整 URL」缓存，裸链接发布后长期返回旧版，带版本参数才能保证扫到的是当前版本。
+应用本体在 app.html，入口 index.html 只做转发（见 HANDOVER §1.5）。传入根链接时会自动
+改写成 `/app.html?sharecode=…` —— 这个链接**永久不变**，发版后自动跟随更新。
 
 产物：项目根目录 qrcode.png，492x630，白底，二维码 + 标题 + 链接文字。
 """
@@ -36,10 +36,10 @@ def current_version(root: str) -> str:
 def main(url: str) -> None:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # 统一下发「带版本号」的链接，绕开边缘缓存的旧副本
-    ver = current_version(root)
-    if ver and "sharecode=" in url and "&v=" not in url:
-        url = url + "&v=" + ver
+    # v1.6.2 起应用在 app.html，入口 index.html 只做转发；链接本身永久不变。
+    # 若传入的是裸根链接（以 / 或 /? 结尾），自动改写成 app.html 路径。
+    if "sharecode=" in url and "/app.html" not in url:
+        url = url.replace("/?sharecode=", "/app.html?sharecode=")
 
     qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=12, border=4)
     qr.add_data(url)

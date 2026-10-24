@@ -1,17 +1,17 @@
 // 文档同步工具：让 docs/使用说明.md 与 index.html 里的「帮助」面板保持一致
 //
-//   node tools/sync-doc.js --embed     用 docs/使用说明.md + docs/img/*.png 更新 index.html
-//   node tools/sync-doc.js --extract   从 index.html 反向导出 docs/使用说明.md
+//   node tools/sync-doc.js --embed     用 docs/使用说明.md + docs/img/*.png 更新 app.html
+//   node tools/sync-doc.js --extract   从 app.html 反向导出 docs/使用说明.md
 //
 // 约定：
 //   - 文档里图片写成 ![说明](img/panel-x.png)，嵌进 HTML 时自动转成 img:panel-x
-//   - 图片以 base64 内嵌，保证 index.html 始终是「一个文件拷走就能用」
+//   - 图片以 base64 内嵌，保证 app.html 始终是「一个文件拷走就能用」
 //   - 修改流程：改 md 或换图 → 跑 --embed → 刷新页面即可看到
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const HTML = path.join(ROOT, 'index.html');
+const HTML = path.join(ROOT, 'app.html');
 const MD = path.join(ROOT, 'docs', '使用说明.md');
 const IMGDIR = path.join(ROOT, 'docs', 'img');
 
@@ -21,7 +21,7 @@ const TAG_END = '</script>';
 
 function blockRange(html, open){
   const a = html.indexOf(open);
-  if(a < 0) throw new Error('index.html 里找不到 ' + open);
+  if(a < 0) throw new Error('app.html 里找不到 ' + open);
   const b = html.indexOf(TAG_END, a + open.length);
   if(b < 0) throw new Error('找不到 ' + open + ' 的结束标签');
   return { innerStart: a + open.length, innerEnd: b };

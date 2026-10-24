@@ -6,9 +6,9 @@ const path = require('path');
 const os = require('os');
 
 const ROOT = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8');
 const appMatch = html.match(/<script id="app-js">([\s\S]*?)<\/script>/);
-if (!appMatch) { console.error('index.html 中找不到 <script id="app-js">'); process.exit(1); }
+if (!appMatch) { console.error('app.html 中找不到 <script id="app-js">'); process.exit(1); }
 const js = appMatch[1];
 
 // 版本号唯一数据源在页头的第一个 script 里（不在 app-js 内），抽取后注入全局，
