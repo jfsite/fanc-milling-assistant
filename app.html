@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.6.3";
+  const APP_VERSION = "1.6.4";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.6.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.6.4 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1338,7 +1338,7 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 | **PNG / JPG / WebP**（位图） | 云端视觉模型识别成轮廓 JSON | 需人工核对 | 需要登录发布链接、联网，且要求有支持读图的模型 |
 
 - 位图会先缩到最长边 1200 px 再送模型，文件上限 8 MB；**单次识别超时 90 秒**，书页照片常要 20~60 秒。
-- 位图结果会自动做三件事：① 按模型读到的 **毛坯外框** 剔除（不当作加工轮廓）② 平移到原点 ③ 按模型读到的 **标注总长/总宽** 等比校准。任何一步做了处理都会在摘要里写明。
+- 位图结果会自动做三件事：① 按模型读到的 **毛坯外框** 剔除（不当作加工轮廓）② 平移到原点 ③ **只有当模型引用了图上印刷原文**（如「78 -0.05」）时，才按该尺寸等比校准；没引用原文的尺寸一律当估计值，不采信。任何一步做了处理都会在摘要里写明。
 - SVG 的单位按 `width`/`height` 的物理单位换算（mm/cm/in/pt/px）。只写了 `width="96"` 这类无单位值时按 96 dpi 折算，界面会提示"尺寸可能不准"。
 
 #### 10.2.2 适用的零件类型
@@ -1437,7 +1437,9 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 | 模型自评可信度较低 | confidence < 0.7，建议改 SVG 或手工修正 |
 | 识别超时（90 秒未返回） | 书页照片/大图常超时：裁剪到只剩俯视图再试，或改用 SVG |
 | 已按毛坯处理并忽略 80×80 的外框 | 模型区分出了毛坯与零件轮廓，外框未参与加工 |
-| 已按图纸标注 78×78 mm 校准比例（倍率 ×0.98） | 尺寸已按标注校正，可用「零件长/宽」再手动干预 |
+| 已按图纸标注「78 -0.05」校准比例：78×78 mm，倍率 ×1.026 | 尺寸已按印刷标注校正 |
+| 模型给出的尺寸（50×50）没有引用图上标注原文 | 模型可能在编尺寸，已忽略；请人工核对或用「零件长/宽」 |
+| 标注与识别轮廓长宽比不符（差 40%），**未自动缩放** | 轮廓形状本身可能识别错了，硬缩放只会放大错误 |
 | 图中未读到可用的总长/总宽标注 | 比例来自像素估算，必须手动核对或填「零件长/宽」 |
 | 标注长宽比与识别轮廓不一致 | 长宽比差 >8%，已按长度方向校准，短边需人工核对 |
 
@@ -4559,7 +4561,7 @@ const DWG_SYSTEM = [
   '你是机械制图识别助手。从图片中识别一个二维铣削零件要加工的轮廓与圆孔，只输出 JSON，不要任何多余文字。',
   'JSON 结构：',
   '{"unit":"mm","confidence":0~1,"view":"你采用的那张视图，如 俯视图",',
-  ' "dims":{"w":零件轮廓总长,"h":零件轮廓总宽} 或 null,   // 只填图上明确标注的尺寸；只有单方向标注时另一项填 null',
+  ' "dims":{"w":零件轮廓总长,"h":零件轮廓总宽,"text":"该尺寸在图上印的原文，如 78 -0.05"} 或 null,',
   ' "blank":{"w":毛坯长,"h":毛坯宽} 或 null,              // 图中画出的毛坯/下料外框尺寸',
   ' "contours":[{"role":"outer"或"inner","points":[[x,y],...]}],',
   ' "holes":[{"x":数值,"y":数值,"d":数值}],',
@@ -4567,7 +4569,8 @@ const DWG_SYSTEM = [
   '关键规则（务必遵守）：',
   '1) 只取「俯视图」这类能看出完整外形的主视图。图中有轴测立体图（3D 效果图）、侧视图、剖视图时全部忽略，只看平面轮廓那张。',
   '2) **区分毛坯与零件轮廓**：如果图上既有矩形外框、内部又有一套曲线轮廓（常见于"外轮廓铣削"练习图，外框常标 80、内轮廓标 78 这种差值），则外框是毛坯或视图边界，**必须放进 blank，绝不能作为 contours 输出**；contours 只放真正要铣出来的形状。拿不准时看轴测图：凸起/凹下的那层形状才是零件轮廓。',
-  '3) 尺寸优先：能从标注读出的总长总宽写进 dims（如 "78 -0.05" 取 78，"80" 取 80）。公差、±、Ra、形位公差框都不要写进数值。',
+  '3) 尺寸只认印在图上的数字：dims 必须能在 text 里引用到图上真实印着的原文（如 "78 -0.05"、"80"）。',
+  '   **图上没有印出总长/总宽时 dims 必须为 null**，绝对不许用基点坐标、默认值或你的估计去凑。公差、±、Ra、形位公差框不写进数值。',
   '4) 线条即几何：粗实线是可见轮廓；细实线/虚线（尺寸线、中心线、剖面线、图框、标题栏）忽略。圆弧轮廓用足够密的点逼近（每 90° 至少 4 段，R 越小段越密）。',
   '5) 坐标：原点取 contours 外轮廓左下角，X 向右、Y 向上，单位 mm；points 首尾不同点，每条 8~120 个点。',
   '6) 圆孔放 holes，d 为直径（标 "4×Ø8" 时每个孔都输出，d=8）。',
@@ -4701,28 +4704,40 @@ function dwgNormalizeRaster(contours, holes, opt){
 
   // 3) 按标注尺寸等比校准
   const curW = bb.maxX - bb.minX, curH = bb.maxY - bb.minY;
-  const dims = (o.dims && o.dims.w > 0 && o.dims.h > 0) ? o.dims : null;
-  let scale = 1, target = null;
+  // 只有「模型引用了图上原文」的尺寸才当标注用；否则视为估计值，不采信
+  const rawDims = (o.dims && o.dims.w > 0 && o.dims.h > 0) ? o.dims : null;
+  const hasText = !!(rawDims && String(rawDims.text || '').trim().length);
+  let dims = hasText ? rawDims : null;
+  if(rawDims && !hasText){
+    warn.push('模型给出的尺寸（' + rawDims.w + '×' + rawDims.h + '）没有引用图上标注原文，已按估算处理、不用于校准');
+  }
+  let scale = 1;
   if(dims){
     const sw = dims.w/curW, sh = dims.h/curH;
-    scale = sw;
-    if(Math.abs(sw - sh)/Math.max(sw, sh) > 0.08){
-      warn.push('标注长宽比与识别轮廓不一致（识别 ' + curW.toFixed(1) + '×' + curH.toFixed(1)
-        + '，标注 ' + dims.w + '×' + dims.h + '），已按长度方向校准，请核对短边尺寸');
+    const mismatch = Math.abs(sw - sh)/Math.max(sw, sh);
+    if(mismatch > 0.08){
+      // 长宽比都不对，说明轮廓形状本身就没抓准，硬缩放只会把错误放大
+      warn.push('标注 ' + dims.w + '×' + dims.h + ' 与识别轮廓 ' + curW.toFixed(1) + '×' + curH.toFixed(1)
+        + ' 长宽比不符（差 ' + Math.round(mismatch*100) + '%），**未自动缩放**：轮廓形状本身可能识别错了，'
+        + '请用「零件长/宽」手动定尺寸，或改用 SVG');
+      dims = null;
+    } else {
+      scale = sw;
     }
-    target = {w:dims.w, h:dims.h};
   }
   cs.forEach(c2=>{ c2.pts = c2.pts.map(p=>[p[0]*scale, p[1]*scale]); });
   const hs2 = hs.map(h=>({x:h.x*scale, y:h.y*scale, d:h.d*scale}));
   if(dims){
-    warn.push('已按图纸标注 ' + dims.w + '×' + dims.h + ' mm 校准比例（识别原尺寸 '
-      + curW.toFixed(1) + '×' + curH.toFixed(1) + '，倍率 ×' + scale.toFixed(3) + '）');
+    warn.push('已按图纸标注「' + String(dims.text).trim() + '」校准比例：' + dims.w + '×' + dims.h
+      + ' mm，倍率 ×' + scale.toFixed(3));
+  } else if(!hasText && rawDims){
+    // 上面已提示过，不重复
   } else {
     warn.push('图中未读到可用的总长/总宽标注，尺寸按像素比例估算，**必须**手动核对');
   }
 
-  const size = target ? {w:+target.w.toFixed(3), h:+target.h.toFixed(3)}
-                      : {w:+(curW*scale).toFixed(3), h:+(curH*scale).toFixed(3)};
+  // 一律报告真实外框，绝不拿"目标尺寸"冒充识别结果
+  const size = {w:+(curW*scale).toFixed(3), h:+(curH*scale).toFixed(3)};
   return {ir: {
     unit:'mm', src:'raster', size:size,
     contours: cs, holes: hs2, warn: warn,

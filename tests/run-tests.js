@@ -414,7 +414,7 @@ ok('无 location 环境（Node/测试）下版本自检不报错', catchErr(()=>
 // --- 12. 位图后处理：毛坯剔除 + 尺寸校准 ---
 const bigSquare = {role:'outer', pts:[[0,0],[80,0],[80,80],[0,80]], closed:true};
 const wavy = {role:'outer', pts:[[2,2],[78,2],[78,78],[2,78]], closed:true};
-const nr1 = M.dwgNormalizeRaster([bigSquare, wavy], [], {blank:{w:80,h:80}, dims:{w:78,h:78}, warn:[]});
+const nr1 = M.dwgNormalizeRaster([bigSquare, wavy], [], {blank:{w:80,h:80}, dims:{w:78,h:78,text:'78 -0.05'}, warn:[]});
 ok('毛坯外框按 blank 剔除', nr1.ir.contours.length === 1, nr1.ir.contours.length);
 ok('剔除后按标注 78 校准', near(nr1.ir.size.w, 78, 1e-3) && near(nr1.ir.size.h, 78, 1e-3), nr1.ir.size);
 ok('校准后轮廓外框到 78', near(M.dwgBBox(nr1.ir.contours[0].pts).maxX, 78, 0.01), M.dwgBBox(nr1.ir.contours[0].pts));
@@ -426,11 +426,17 @@ ok('无标注时不缩放且提示核对', near(nr2.ir.size.w, 76, 1e-6) && nr2.
 
 // 标注长宽比与轮廓不符时要提示
 const tall = {role:'outer', pts:[[0,0],[40,0],[40,100],[0,100]], closed:true};
-const nr3 = M.dwgNormalizeRaster([tall], [], {dims:{w:80,h:80}, warn:[]});
+const nr3 = M.dwgNormalizeRaster([tall], [], {dims:{w:80,h:80,text:'80'}, warn:[]});
 ok('长宽比不符时给出警告', nr3.ir.warn.join('').indexOf('长宽比') >= 0, nr3.ir.warn);
+ok('长宽比不符时不缩放', near(M.dwgBBox(nr3.ir.contours[0].pts).maxX, 40, 0.01), M.dwgBBox(nr3.ir.contours[0].pts));
+
+// 没有引用标注原文的尺寸一律不采信（防模型编造）
+const nr5 = M.dwgNormalizeRaster([wavy], [], {dims:{w:50,h:50}, warn:[]});
+ok('无原文证据的尺寸不用于校准', near(nr5.ir.size.w, 76, 1e-6), nr5.ir.size);
+ok('无原文证据时给出提示', nr5.ir.warn.join('').indexOf('没有引用图上标注原文') >= 0, nr5.ir.warn);
 
 // 孔随轮廓一起缩放
-const nr4 = M.dwgNormalizeRaster([wavy], [{x:40,y:40,d:6}], {dims:{w:76,h:76}, warn:[]});
+const nr4 = M.dwgNormalizeRaster([wavy], [{x:40,y:40,d:6}], {dims:{w:76,h:76,text:'76'}, warn:[]});
 ok('孔随轮廓平移且按比例缩放', near(nr4.ir.holes[0].d, 6, 1e-6) && near(nr4.ir.holes[0].x, 38, 1e-6), nr4.ir.holes);
 
 fs.unlinkSync(modPath);
