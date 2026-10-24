@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.6.5";
+  const APP_VERSION = "1.7.0";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -503,10 +503,10 @@
   <!-- 图纸生成程序 -->
   <div class="card">
     <h2>图纸生成程序</h2>
-    <p class="hint" style="margin-bottom:10px">上传零件图纸 → 自动识别轮廓与孔 → 按 FANUC 语法生成程序，生成后自动跑校验并画刀轨。</p>
+    <p class="hint" style="margin-bottom:10px">上传零件图纸 → 解析成几何图元 → 本地合成 SVG → 生成 FANUC 程序。中间产物 SVG 可下载存档、可复用。</p>
     <div class="dwg-drop" id="dwg-drop">
       <b>点击选择图纸，或把文件拖到这里</b>
-      <span>SVG（矢量解析，几何精确，推荐）· PNG / JPG（视觉模型识别，需联网）</span>
+      <span>SVG（本地解析，几何精确）· PNG / JPG（先解析成图元再合成 SVG，需联网）</span>
     </div>
     <input type="file" id="dwg-file" accept=".svg,image/png,image/jpeg" style="display:none">
     <div class="dwg-scope">
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.6.5 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.7.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1335,7 +1335,7 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 | 格式 | 处理方式 | 准确性 | 备注 |
 |---|---|---|---|
 | **SVG**（矢量） | 浏览器内本地解析 | **几何精确** | 支持 `rect` / `circle` / `ellipse` / `polygon` / `polyline` / `path`（M L H V C S Q T A Z），支持 `<g transform>`；圆弧按弦高 0.05 mm 离散成直线段 |
-| **PNG / JPG / WebP**（位图） | 云端视觉模型识别成轮廓 JSON | 需人工核对 | 需要登录发布链接、联网，且要求有支持读图的模型 |
+| **PNG / JPG / WebP**（位图） | 云端视觉模型解析成**几何图元**（line/arc/circle）→ 本地合成 SVG | 需人工核对图元表 | 需要联网与支持读图的模型；合成出的 SVG 可下载存档 |
 
 - 位图会先缩到最长边 1200 px 再送模型，文件上限 8 MB；**单次识别超时 90 秒**，书页照片常要 20~60 秒。
 - 位图结果会自动做三件事：① 按模型读到的 **毛坯外框** 剔除（不当作加工轮廓）② 平移到原点 ③ **只有当模型引用了图上印刷原文**（如「78 -0.05」）时，才按该尺寸等比校准；没引用原文的尺寸一律当估计值，不采信。任何一步做了处理都会在摘要里写明。
@@ -1349,6 +1349,21 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 | **不适用** | 三维曲面与型腔曲面、装配图与剖视图、齿轮与螺纹、薄壁（< 0.5 mm）、只有实物照片没有图纸、需要多工序多刀具的复杂工艺 |
 
 越界的情况不会硬生成：要么在识别阶段就报错，要么在生成前被检查拦住（见 10.2.6）。
+
+#### 10.2.2.1 位图是怎么变成 SVG 的
+
+```
+图片 ──视觉模型──> 图元 JSON ──本地合成──> outline.svg ──既有链路──> 程序
+                     (line/arc/circle)        │
+                                       图元清单 + 三道校验
+```
+
+- 模型**只输出图元**（直线段、圆弧用圆心+R+起止角、圆孔），不输出点列。所以 R100 就是 R100，不是 40 个点。
+- 本地按端点贪心串接（模型给的顺序乱了也没关系），接缝容差 0.05 mm。
+- 合成后在界面上给出**图元清单**（每条的长度、圆心、半径、起止角），逐条核对比核对两百个点现实。
+- 三道校验：**S01** 轮廓未闭合（缺口多少毫米、在第几段）、**S02** 自交（图元参数自相矛盾）、**S03** 尺寸对不上（图上标注与实测外形差 >0.6 mm）。
+- 有 S01/S02 时**阻断生成**；S03 只提示。
+- 合成出的 SVG 可以「下载 SVG」存下来，下次直接当矢量图纸上传，不再调模型。
 
 #### 10.2.3 生成所依据的参数
 
@@ -1437,9 +1452,9 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 | 模型自评可信度较低 | confidence < 0.7，建议改 SVG 或手工修正 |
 | 识别超时（90 秒未返回） | 书页照片/大图常超时：裁剪到只剩俯视图再试，或改用 SVG |
 | 已按毛坯处理并忽略 80×80 的外框 | 模型区分出了毛坯与零件轮廓，外框未参与加工 |
-| 已按图纸标注「78 -0.05」校准比例：78×78 mm，倍率 ×1.026 | 尺寸已按印刷标注校正 |
-| 模型给出的尺寸（50×50）没有引用图上标注原文 | 模型可能在编尺寸，已忽略；请人工核对或用「零件长/宽」 |
-| 标注与识别轮廓长宽比不符（差 40%），**未自动缩放** | 轮廓形状本身可能识别错了，硬缩放只会放大错误 |
+| 轮廓未闭合，首尾差 0.8 mm | S01：图元有缺失或端点对不上，生成被阻断 |
+| 轮廓 1 自交 2 处 | S02：图元参数自相矛盾（半径/圆心/角度），生成被阻断 |
+| 标注「78」= 78 与轮廓实测 80×40 对不上 | S03：提示某条标注与外形不符，核对那条图元 |
 | 图中未读到可用的总长/总宽标注 | 比例来自像素估算，必须手动核对或填「零件长/宽」 |
 | 标注长宽比与识别轮廓不一致 | 长宽比差 >8%，已按长度方向校准，短边需人工核对 |
 
@@ -4023,7 +4038,8 @@ document.getElementById('nav').addEventListener('click', e=>{
 // 设计原则：识别只负责"拿到几何"，生成与校验全部走本地确定性代码，
 // 输出的程序一定能被「程序校验」与「刀轨演示」两个模块读懂。
 
-const DWG = { ir:null, name:'', kind:'', code:'', warn:[], busy:false };
+const DWG = { ir:null, baseIR:null, name:'', kind:'', code:'', warn:[], busy:false,
+              prims:null, svg:'', dims:[], stats:null, checks:[], meta:null };
 const DWG_TOL = 0.05;      // 圆弧离散为折线的弦高容差（mm）
 const DWG_LLM_MS = 90000;  // 视觉识别超时（真实照片常要 20~60 秒）
 
@@ -4594,33 +4610,241 @@ function dwgExtractJson(text){
   return null;
 }
 
-// --- 位图：视觉模型识别 → IR ---
+// --- 图纸 → 图元 → SVG ---
+// 设计：模型只负责"看懂图纸"输出几何图元（line/arc/circle）+ 标注原文；
+// 由本地代码拼成 SVG，再走 SVG → 轮廓 → 程序的既有链路。
+// 这样几何可验证（闭合/自交/尺寸一致），不会再出现"一坨点"没法核对的情况。
+
 const DWG_SYSTEM = [
-  '你是机械制图识别助手。从图片中识别一个二维铣削零件要加工的轮廓与圆孔，只输出 JSON，不要任何多余文字。',
-  'JSON 结构：',
-  '{"unit":"mm","confidence":0~1,"view":"你采用的那张视图，如 俯视图",',
-  ' "dims":{"w":零件轮廓总长,"h":零件轮廓总宽,"text":"该尺寸在图上印的原文，如 78 -0.05"} 或 null,',
-  ' "blank":{"w":毛坯长,"h":毛坯宽} 或 null,              // 图中画出的毛坯/下料外框尺寸',
-  ' "contours":[{"role":"outer"或"inner","points":[[x,y],...]}],',
-  ' "holes":[{"x":数值,"y":数值,"d":数值}],',
+  '你是机械制图解析助手。把图中零件的**二维轮廓**拆成几何图元，只输出 JSON，不要任何解释文字。',
+  '格式：',
+  '{"unit":"mm","confidence":0~1,"view":"采用的视图，如 俯视图",',
+  ' "primitives":[',
+  '   {"type":"line","x1":数值,"y1":数值,"x2":数值,"y2":数值},',
+  '   {"type":"arc","cx":数值,"cy":数值,"r":数值,"a0":起始角(度),"a1":终止角(度),"ccw":true或false},',
+  '   {"type":"circle","cx":数值,"cy":数值,"r":数值,"role":"hole"}',
+  ' ],',
+  ' "closed":true或false,',
+  ' "dims":[{"text":"图上印的原文，如 78 -0.05","value":数值}],',
+  ' "blank":{"w":毛坯长,"h":毛坯宽} 或 null,',
   ' "notes":"简短中文说明"}',
-  '关键规则（务必遵守）：',
-  '1) 只取「俯视图」这类能看出完整外形的主视图。图中有轴测立体图（3D 效果图）、侧视图、剖视图时全部忽略，只看平面轮廓那张。',
-  '2) **区分毛坯与零件轮廓**：如果图上既有矩形外框、内部又有一套曲线轮廓（常见于"外轮廓铣削"练习图，外框常标 80、内轮廓标 78 这种差值），则外框是毛坯或视图边界，**必须放进 blank，绝不能作为 contours 输出**；contours 只放真正要铣出来的形状。拿不准时看轴测图：凸起/凹下的那层形状才是零件轮廓。',
-  '3) 尺寸只认印在图上的数字：dims 必须能在 text 里引用到图上真实印着的原文（如 "78 -0.05"、"80"）。',
-  '   **图上没有印出总长/总宽时 dims 必须为 null**，绝对不许用基点坐标、默认值或你的估计去凑。公差、±、Ra、形位公差框不写进数值。',
-  '4) 线条即几何：粗实线是可见轮廓；细实线/虚线（尺寸线、中心线、剖面线、图框、标题栏）忽略。圆弧轮廓用足够密的点逼近（每 90° 至少 4 段，R 越小段越密）。',
-  '5) 坐标：原点取 contours 外轮廓左下角，X 向右、Y 向上，单位 mm；points 首尾不同点，每条 8~120 个点。',
-  '6) 圆孔放 holes，d 为直径（标 "4×Ø8" 时每个孔都输出，d=8）。',
-  '7) 如果图是书页照片 / 手机拍摄（倾斜、旋转、有书脊阴影）：按**文字正常方向**理解图面，忽略页面边框、手指、阴影；能读出标注就用标注校核比例。',
-  '8) 看不清或无法确定就不要编造：把 confidence 调低，在 notes 里写清哪部分不确定。',
-  '9) 若图中根本不是二维铣削零件图（纯三维渲染、装配图、电路图、风景照），返回 {"error":"具体原因"}。',
-  '示例（外轮廓铣削练习图）：外框 80×80 是毛坯、内部 78×78 带 R100/R19 曲线的是零件 → 输出 blank={w:80,h:80}，dims={w:78,h:78}，contours 只含那条曲线，role=outer。'
+  '硬性要求：',
+  '1) 只解析俯视图里**要加工的那条闭合轮廓**。毛坯外框、图框、尺寸线、中心线、剖面线、标题栏、轴测立体图、侧视图、剖视图一律不要。',
+  '2) 外框标 80、内轮廓标 78 这种图：外框放 blank，轮廓只输出 78 那条。',
+  '3) 每条直线段一个 line，每段圆弧一个 arc；**图上标了 R 的圆弧必须用 arc 且 r 取标注值**，不许拉直成 line。',
+  '4) 角度以 X 正方向为 0°，逆时针为正；圆心/半径/起止角要能自洽（起点终点必须落在圆上）。',
+  '5) 相邻图元首尾相接，接缝误差 <0.05mm；图元顺序可以任意，本地会自动串接。',
+  '6) dims 只收录图上真的印着的尺寸（含 R 值），text 必须是原文；没印就不写，不许用基点坐标或估计值凑。',
+  '7) 坐标原点取轮廓左下角，X 向右、Y 向上，单位 mm。',
+  '8) 圆孔用 circle 且 role=hole（"4×Ø8"要输出 4 个）。',
+  '9) 照片倾斜/旋转时按文字正常方向理解，忽略页面边框、书脊阴影、手指。',
+  '10) 若图中不是二维铣削零件图（纯 3D 渲染/装配图/电路图/风景照），返回 {"error":"原因"}。'
 ].join('');
 
-async function dwgRasterToIR(file){
+// 归一化一个图元：统一成 {kind:'line'|'arc'|'circle', ...}
+function dwgNormPrim(p){
+  if(!p || typeof p !== 'object') return null;
+  if(p.type === 'line'){
+    const v = [p.x1, p.y1, p.x2, p.y2].map(Number);
+    if(v.some(x=>!isFinite(x))) return null;
+    if(Math.hypot(v[2]-v[0], v[3]-v[1]) < 1e-6) return null;
+    return {kind:'line', x1:v[0], y1:v[1], x2:v[2], y2:v[3]};
+  }
+  if(p.type === 'circle'){
+    const cx = Number(p.cx), cy = Number(p.cy), r = Number(p.r);
+    if(!isFinite(cx) || !isFinite(cy) || !(r > 1e-6)) return null;
+    return {kind:'circle', cx:cx, cy:cy, r:r, role:p.role === 'hole' ? 'hole' : 'circle'};
+  }
+  if(p.type === 'arc'){
+    const cx = Number(p.cx), cy = Number(p.cy), r = Number(p.r);
+    let a0 = Number(p.a0), a1 = Number(p.a1);
+    if(!isFinite(cx) || !isFinite(cy) || !(r > 1e-6) || !isFinite(a0) || !isFinite(a1)) return null;
+    // 取"短弧"为默认方向；只有当 |a1-a0|>180 时才按 ccw 判断方向
+    let d = a1 - a0;
+    while(d <= -360) d += 360;
+    while(d >= 360) d -= 360;
+    if(Math.abs(d) > 180) d = d > 0 ? d - 360 : d + 360;   // 折成 (-180,180]
+    if(Math.abs(d) < 1e-4) return null;                     // 退化
+    return {kind:'arc', cx:cx, cy:cy, r:r, a0:a0, sw:d};    // sw>0 逆时针
+  }
+  return null;
+}
+
+function dwgPrimPt(p, which){  // which: 0 起点, 1 终点
+  if(p.kind === 'line') return which ? [p.x2, p.y2] : [p.x1, p.y1];
+  const a = (p.a0 + (which ? p.sw : 0)) * Math.PI/180;
+  return [p.cx + p.r*Math.cos(a), p.cy + p.r*Math.sin(a)];
+}
+function dwgPrimFlip(p){
+  if(p.kind === 'line') return {kind:'line', x1:p.x2, y1:p.y2, x2:p.x1, y2:p.y1};
+  return {kind:'arc', cx:p.cx, cy:p.cy, r:p.r, a0:p.a0 + p.sw, sw:-p.sw};
+}
+function dwgPrimLen(p){
+  if(p.kind === 'line') return Math.hypot(p.x2-p.x1, p.y2-p.y1);
+  return Math.abs(p.sw)*Math.PI/180*p.r;
+}
+function dwgPrimSample(p, step){
+  if(p.kind === 'line') return [[p.x1,p.y1],[p.x2,p.y2]];
+  const n = Math.max(4, Math.min(240, Math.ceil(Math.abs(p.sw)*Math.PI/180*p.r/(step||0.6))));
+  const out = [];
+  for(let i=0;i<=n;i++){
+    const a = (p.a0 + p.sw*i/n)*Math.PI/180;
+    out.push([p.cx + p.r*Math.cos(a), p.cy + p.r*Math.sin(a)]);
+  }
+  return out;
+}
+
+// 图元 → SVG。返回 {svg, prims, gaps, closeGap, warn}
+function dwgPrimsToSvg(rawPrims, opt){
+  const o = opt || {};
+  const tol = o.tol || 0.05;
+  const warn = [];
+  const all = (rawPrims || []).map(dwgNormPrim).filter(Boolean);
+  const items = all.filter(p=>p.kind !== 'circle');
+  const circles = all.filter(p=>p.kind === 'circle');
+  if(!items.length) return {ok:false, error:'模型没有给出可用的直线/圆弧图元'};
+
+  // 1) 按端点贪心串接（模型给的顺序可能乱）
+  const used = items.map(()=>false);
+  const chain = [];
+  const gaps = [];
+  let cur = items[0];
+  used[0] = true;
+  chain.push(cur);
+  for(let k=1;k<items.length;k++){
+    const end = dwgPrimPt(cur, 1);
+    let best = -1, bestD = Infinity, flip = false;
+    for(let i=0;i<items.length;i++){
+      if(used[i]) continue;
+      const d0 = Math.hypot(dwgPrimPt(items[i],0)[0]-end[0], dwgPrimPt(items[i],0)[1]-end[1]);
+      const d1 = Math.hypot(dwgPrimPt(items[i],1)[0]-end[0], dwgPrimPt(items[i],1)[1]-end[1]);
+      if(d0 < bestD - 1e-9){ bestD = d0; best = i; flip = false; }
+      if(d1 < bestD - 1e-9){ bestD = d1; best = i; flip = true; }
+    }
+    if(best < 0) break;
+    used[best] = true;
+    const nx = flip ? dwgPrimFlip(items[best]) : items[best];
+    if(bestD > tol) gaps.push({at:chain.length, gap:+bestD.toFixed(3)});
+    chain.push(nx);
+    cur = nx;
+  }
+  if(chain.length < items.length) warn.push('有 ' + (items.length - chain.length) + ' 个图元接不上，已忽略');
+
+  const startPt = dwgPrimPt(chain[0], 0);
+  const endPt = dwgPrimPt(chain[chain.length-1], 1);
+  const closeGap = Math.hypot(endPt[0]-startPt[0], endPt[1]-startPt[1]);
+
+  // 2) 包围盒（含圆弧采样）
+  let pts = [];
+  chain.forEach(p=>{
+    pts = pts.concat(dwgPrimSample(p, 0.5));
+    if(p.kind === 'arc'){
+      // 补上 0/90/180/270 四个极值点，避免包围盒因采样间隔偏小
+      const a0 = p.a0, a1 = p.a0 + p.sw;
+      const lo = Math.min(a0, a1), hi = Math.max(a0, a1);
+      [0, 90, 180, 270, 360].forEach(deg=>{
+        const probe = deg;
+        const alt = deg - 360, alt2 = deg + 360;
+        [probe, alt, alt2].forEach(dd=>{
+          if(dd >= lo - 1e-9 && dd <= hi + 1e-9){
+            const r = dd*Math.PI/180;
+            pts.push([p.cx + p.r*Math.cos(r), p.cy + p.r*Math.sin(r)]);
+          }
+        });
+      });
+    }
+  });
+  circles.forEach(c=>{ pts = pts.concat([[c.cx-c.r, c.cy-c.r],[c.cx+c.r, c.cy+c.r]]); });
+  const bb = dwgBBox(pts);
+  const W = Math.max(bb.maxX - bb.minX, 0.001), H = Math.max(bb.maxY - bb.minY, 0.001);
+  // SVG 的 Y 向下：翻转并把左下角挪到原点
+  const sx = (x, y)=>[+(x - bb.minX).toFixed(4), +(H - (y - bb.minY)).toFixed(4)];
+
+  // 拼成一条连续子路径：只有第一段（或接缝断开处）才写 M，其余直接续 L / A，
+  // 否则每个图元都会变成一个只有两点的独立子路径，parseSvgIR 会当成退化轮廓丢掉。
+  const d = [];
+  let prev = null;
+  chain.forEach(p=>{
+    const pa = sx.apply(null, dwgPrimPt(p, 0));
+    const pb = sx.apply(null, dwgPrimPt(p, 1));
+    const needM = !prev || Math.hypot(pa[0]-prev[0], pa[1]-prev[1]) > 1e-4;
+    const head = needM ? ('M' + pa[0] + ' ' + pa[1]) : '';
+    if(p.kind === 'line'){
+      d.push(head + 'L' + pb[0] + ' ' + pb[1]);
+    } else {
+      const large = Math.abs(p.sw) > 180 ? 1 : 0;
+      const sweep = p.sw > 0 ? 1 : 0;   // 数学逆时针 + Y 翻转 = 屏幕顺时针 = sweep 1
+      d.push(head + 'A' + p.r + ' ' + p.r + ' 0 ' + large + ' ' + sweep + ' ' + pb[0] + ' ' + pb[1]);
+    }
+    prev = pb;
+  });
+  if(closeGap <= tol) d.push('Z');
+
+  let body = '<path d="' + d.join('') + '" fill="none" stroke="#000" stroke-width="0.2"/>';
+  circles.forEach(c=>{
+    const q = sx(c.cx, c.cy);
+    body += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="' + (+c.r.toFixed(4)) + '" fill="none" stroke="#000" stroke-width="0.2"/>';
+  });
+
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W.toFixed(3) + 'mm" height="' + H.toFixed(3)
+    + 'mm" viewBox="0 0 ' + W.toFixed(3) + ' ' + H.toFixed(3) + '">' + body + '</svg>';
+
+  return {
+    ok: true, svg: svg, prims: chain.concat(circles),
+    gaps: gaps, closeGap: +closeGap.toFixed(3), closed: closeGap <= tol,
+    size: {w:+W.toFixed(3), h:+H.toFixed(3)}, warn: warn
+  };
+}
+
+// S01 闭合 / S02 自交 / S03 尺寸一致性
+function dwgSelfIntersect(pts){
+  const n = pts.length;
+  const cut = (p1,p2,p3,p4)=>{
+    const d1 = (p2[0]-p1[0])*(p3[1]-p1[1]) - (p2[1]-p1[1])*(p3[0]-p1[0]);
+    const d2 = (p2[0]-p1[0])*(p4[1]-p1[1]) - (p2[1]-p1[1])*(p4[0]-p1[0]);
+    const d3 = (p4[0]-p3[0])*(p1[1]-p3[1]) - (p4[1]-p3[1])*(p1[0]-p3[0]);
+    const d4 = (p4[0]-p3[0])*(p2[1]-p3[1]) - (p4[1]-p3[1])*(p2[0]-p3[0]);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  };
+  let hits = 0;
+  for(let i=0;i<n;i++){
+    const a1 = pts[i], a2 = pts[(i+1)%n];
+    for(let j=i+2;j<n;j++){
+      if(i === 0 && j === n-1) continue;  // 首尾相邻
+      if(cut(a1, a2, pts[j], pts[(j+1)%n])) hits++;
+    }
+  }
+  return hits;
+}
+
+function dwgDimsCheck(ir, dims){
+  const out = [];
+  if(!ir) return out;
+  const size = ir.size || {w:0,h:0};
+  const list = (dims || []).filter(x=>{
+    if(!x || !(x.value > 0)) return false;
+    const txt = String(x.text || '').trim();
+    if(!txt) return false;
+    if(/^[RrØøΦφ]/.test(txt)) return false;   // 半径/直径标注不是外形尺寸
+    if(/[°度]/.test(txt)) return false;        // 角度
+    return true;
+  });
+  // 只拿"接近总长/总宽"的标注来比（容差 0.6mm）
+  list.forEach(x=>{
+    const hitW = Math.abs(size.w - x.value) <= 0.6;
+    const hitH = Math.abs(size.h - x.value) <= 0.6;
+    if(hitW || hitH) return;
+    if(x.value > Math.max(size.w, size.h) * 1.4) return;  // 明显是别的尺寸，不打扰
+    if(x.value < Math.min(size.w, size.h) * 0.6) return;
+    out.push({lv:'warn', code:'S03', msg:'标注「' + x.text + '」= ' + x.value
+      + ' 与轮廓实测 ' + size.w + '×' + size.h + ' 对不上，请核对这条图元'});
+  });
+  return out;
+}
+
+async function dwgRasterToPrims(file){
   const c = initCloud();
-  if(!c) throw new Error('云服务未就绪（AI 模块只在发布链接下可用），请改用 SVG 图纸');
+  if(!c) throw new Error('云服务未就绪（AI 模块只在发布链接下可用），请改用 SVG');
   let models;
   try { models = await c.llm.models.list(); }
   catch(e){ throw new Error('获取模型列表失败：' + ((e.error && e.error.code) || e.message)); }
@@ -4634,12 +4858,12 @@ async function dwgRasterToIR(file){
       const img = new Image();
       img.onerror = ()=>rej(new Error('图片解码失败，请换 PNG / JPG'));
       img.onload = ()=>{
-        const max = 1200;
+        const max = 1400;
         const k = Math.min(1, max/Math.max(img.width, img.height));
         const cv = document.createElement('canvas');
         cv.width = Math.round(img.width*k); cv.height = Math.round(img.height*k);
         cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-        res(cv.toDataURL('image/jpeg', 0.86));
+        res(cv.toDataURL('image/jpeg', 0.9));
       };
       img.src = fr.result;
     };
@@ -4649,139 +4873,39 @@ async function dwgRasterToIR(file){
   const ctrl = new AbortController();
   const timer = setTimeout(()=>ctrl.abort(), DWG_LLM_MS);
   let text = '';
-  try {
-  for await (const ch of c.llm.chat.completions.create({
-    model: vis[0].id,
-    messages: [
-      {role:'system', content: DWG_SYSTEM},
-      {role:'user', content: [
-        {type:'text', text:'识别这张零件图的轮廓与圆孔，按要求输出 JSON。'},
-        {type:'image_url', image_url:{url:dataUrl}}
-      ]}
-    ],
-    stream: true,
-    signal: ctrl.signal
-  })){
-    const d = ch.choices && ch.choices[0] && ch.choices[0].delta;
-    if(d && d.content) text += d.content;
-  }
-  } catch(e){
+  try{
+    for await (const ch of c.llm.chat.completions.create({
+      model: vis[0].id,
+      messages: [
+        {role:'system', content: DWG_SYSTEM},
+        {role:'user', content: [
+          {type:'text', text:'解析这张零件图，输出几何图元 JSON。'},
+          {type:'image_url', image_url:{url:dataUrl}}
+        ]}
+      ],
+      stream: true,
+      signal: ctrl.signal
+    })){
+      const d = ch.choices && ch.choices[0] && ch.choices[0].delta;
+      if(d && d.content) text += d.content;
+    }
+  }catch(e){
     if(e && e.name === 'AbortError'){
-      throw new Error('识别超时（' + Math.round(DWG_LLM_MS/1000) + ' 秒未返回）。书页照片/大图容易超时，建议裁剪到只剩俯视图，或改用 SVG');
+      throw new Error('识别超时（' + Math.round(DWG_LLM_MS/1000) + ' 秒未返回）。书页照片/大图容易超时，建议裁剪到只剩俯视图');
     }
     throw e;
-  } finally {
-    clearTimeout(timer);
-  }
+  }finally{ clearTimeout(timer); }
+
   const j = dwgExtractJson(text);
   if(!j) throw new Error('模型返回的不是有效 JSON，请重试或用 SVG');
   if(j.error) throw new Error('无法识别：' + j.error);
-
-  const contours = (j.contours || []).map(c2=>({
-    role: c2.role === 'inner' ? 'inner' : 'outer',
-    closed: true,
-    pts: (c2.points || []).map(p=>[+p[0], +p[1]]).filter(p=>isFinite(p[0]) && isFinite(p[1]))
-  })).filter(c2=>c2.pts.length >= 3);
-  const holes = (j.holes || []).map(h=>({x:+h.x, y:+h.y, d:+h.d})).filter(h=>isFinite(h.x) && isFinite(h.y) && h.d > 0);
-  if(!contours.length && !holes.length) throw new Error('没识别出任何轮廓或孔，请换更清晰的图或用 SVG');
-
-  const warn = ['轮廓由视觉模型识别，**必须**与图纸标注尺寸逐项核对后再上机'];
-  const conf = typeof j.confidence === 'number' ? j.confidence : null;
-  if(conf !== null && conf < 0.7) warn.push('模型自评可信度较低（' + conf + '），建议改用 SVG 或在编辑器里修正后核对');
-  if(j.view) warn.push('采用的视图：' + j.view);
-
-  const norm = dwgNormalizeRaster(contours, holes, {
-    dims: j.dims || null,
-    blank: j.blank || null,
-    saidSize: j.size || null,
-    conf: conf,
-    warn: warn
-  });
-  if(j.notes) warn.push('模型说明：' + j.notes);
-  return {ok: true, ir: norm.ir, warn: warn};
-}
-
-// 位图结果后处理：剔除毛坯外框 → 平移到原点 → 按标注尺寸等比校准
-function dwgNormalizeRaster(contours, holes, opt){
-  const o = opt || {};
-  const warn = o.warn || [];
-  // 深拷贝：调用方传进来的轮廓可能被复用，不能让本函数改到它
-  const clone = (x)=>JSON.parse(JSON.stringify(x));
-  const src = clone(contours || []);
-  const srcHoles = clone(holes || []);
-  let cs = src.slice();
-
-  // 1) 毛坯外框：与 blank 尺寸接近、且是最大轮廓的矩形，判为毛坯并剔除
-  const blank = o.blank && o.blank.w > 0 && o.blank.h > 0 ? o.blank : null;
-  let droppedBlank = null;
-  if(cs.length > 1){
-    const bbs = cs.map(c2=>({c:c2, b:dwgBBox(c2.pts), a:Math.abs(dwgArea(c2.pts))}));
-    bbs.sort((p,q)=>q.a - p.a);
-    const big = bbs[0];
-    const w = big.b.maxX - big.b.minX, h = big.b.maxY - big.b.minY;
-    if(blank){
-      const tolW = Math.abs(w - blank.w)/Math.max(blank.w, 1e-6);
-      const tolH = Math.abs(h - blank.h)/Math.max(blank.h, 1e-6);
-      if(tolW < 0.06 && tolH < 0.06){
-        droppedBlank = {w:+w.toFixed(2), h:+h.toFixed(2)};
-        cs = cs.filter(c2=>c2 !== big.c);
-      }
-    }
-    // 没有 blank 标注时的兜底：两个轮廓都是「直角矩形 + 明显不同尺寸」且其中一个恰好是另一套曲线，交给模型判定，不自动删
-  }
-  if(droppedBlank){
-    warn.push('已按毛坯处理并忽略 ' + droppedBlank.w + '×' + droppedBlank.h + ' 的外框（不参与加工）');
-  }
-  if(!cs.length){ cs = src.slice(); }  // 全被剔除就退回原样，避免空结果
-
-  // 2) 平移到原点（以剩下的轮廓为准）
-  const allPts = cs.reduce((acc,c2)=>acc.concat(c2.pts), []);
-  const bb = allPts.length ? dwgBBox(allPts) : {minX:0, minY:0, maxX:0, maxY:0};
-  cs.forEach(c2=>{ c2.pts = dwgDedupe(c2.pts.map(p=>[p[0]-bb.minX, p[1]-bb.minY])); });
-  const hs = srcHoles.map(h=>({x:h.x-bb.minX, y:h.y-bb.minY, d:h.d}));
-
-  // 3) 按标注尺寸等比校准
-  const curW = bb.maxX - bb.minX, curH = bb.maxY - bb.minY;
-  // 只有「模型引用了图上原文」的尺寸才当标注用；否则视为估计值，不采信
-  const rawDims = (o.dims && o.dims.w > 0 && o.dims.h > 0) ? o.dims : null;
-  const hasText = !!(rawDims && String(rawDims.text || '').trim().length);
-  let dims = hasText ? rawDims : null;
-  if(rawDims && !hasText){
-    warn.push('模型给出的尺寸（' + rawDims.w + '×' + rawDims.h + '）没有引用图上标注原文，已按估算处理、不用于校准');
-  }
-  let scale = 1;
-  if(dims){
-    const sw = dims.w/curW, sh = dims.h/curH;
-    const mismatch = Math.abs(sw - sh)/Math.max(sw, sh);
-    if(mismatch > 0.08){
-      // 长宽比都不对，说明轮廓形状本身就没抓准，硬缩放只会把错误放大
-      warn.push('标注 ' + dims.w + '×' + dims.h + ' 与识别轮廓 ' + curW.toFixed(1) + '×' + curH.toFixed(1)
-        + ' 长宽比不符（差 ' + Math.round(mismatch*100) + '%），**未自动缩放**：轮廓形状本身可能识别错了，'
-        + '请用「零件长/宽」手动定尺寸，或改用 SVG');
-      dims = null;
-    } else {
-      scale = sw;
-    }
-  }
-  cs.forEach(c2=>{ c2.pts = c2.pts.map(p=>[p[0]*scale, p[1]*scale]); });
-  const hs2 = hs.map(h=>({x:h.x*scale, y:h.y*scale, d:h.d*scale}));
-  if(dims){
-    warn.push('已按图纸标注「' + String(dims.text).trim() + '」校准比例：' + dims.w + '×' + dims.h
-      + ' mm，倍率 ×' + scale.toFixed(3));
-  } else if(!hasText && rawDims){
-    // 上面已提示过，不重复
-  } else {
-    warn.push('图中未读到可用的总长/总宽标注，尺寸按像素比例估算，**必须**手动核对');
-  }
-
-  // 一律报告真实外框，绝不拿"目标尺寸"冒充识别结果
-  const size = {w:+(curW*scale).toFixed(3), h:+(curH*scale).toFixed(3)};
-  return {ir: {
-    unit:'mm', src:'raster', size:size,
-    contours: cs, holes: hs2, warn: warn,
-    confidence: typeof o.conf === 'number' ? o.conf : null,
-    blankDropped: droppedBlank, scaled: !!dims, scale: +scale.toFixed(4)
-  }};
+  const prims = Array.isArray(j.primitives) ? j.primitives : [];
+  if(!prims.length) throw new Error('模型没有识别出任何几何图元，请换更清晰的图或用 SVG');
+  return {
+    prims: prims, dims: j.dims || [], blank: j.blank || null,
+    confidence: typeof j.confidence === 'number' ? j.confidence : null,
+    view: j.view || '', notes: j.notes || '', closed: j.closed !== false
+  };
 }
 
 // --- 图纸编程：界面与交互 ---
@@ -4803,28 +4927,88 @@ function dwgReadText(file){
   });
 }
 
+function dwgPrimText(p){
+  if(p.kind === 'line') return '(' + p.x1.toFixed(2) + ',' + p.y1.toFixed(2) + ') → (' + p.x2.toFixed(2) + ',' + p.y2.toFixed(2) + ')';
+  if(p.kind === 'circle') return 'Ø' + (p.r*2).toFixed(2) + ' @ (' + p.cx.toFixed(2) + ',' + p.cy.toFixed(2) + ')';
+  return 'R' + p.r.toFixed(2) + ' @ (' + p.cx.toFixed(2) + ',' + p.cy.toFixed(2) + ') '
+    + p.a0.toFixed(1) + '° → ' + (p.a0 + p.sw).toFixed(1) + '°';
+}
+
 function dwgRenderSummary(){
   const box = document.getElementById('dwg-summary');
   if(!box) return;
   const ir = DWG.ir;
   if(!ir){ box.innerHTML = ''; return; }
   const cs = ir.contours || [], hs = ir.holes || [];
+  const st = DWG.stats || {};
+  const prims = DWG.prims || [];
+  const arcs = prims.filter(p=>p.kind === 'arc').length;
   const inner = cs.filter(c=>c.role === 'inner').length;
-  const src = ir.src === 'svg' ? 'SVG 矢量解析（几何精确）' : '位图视觉识别（需人工核对）';
+  const src = ir.src === 'svg'
+    ? (DWG.kind === 'svg' ? 'SVG 矢量解析（几何精确）' : '位图 → 图元 → SVG（请核对图元表）')
+    : 'SVG 解析';
+
   let h = '<div class="dwg-sum">'
     + '<div class="s"><b>' + (ir.size ? ir.size.w + ' × ' + ir.size.h : '—') + '</b><span>零件尺寸 (mm)</span></div>'
-    + '<div class="s"><b>' + cs.length + '</b><span>轮廓数（内 ' + inner + '）</span></div>'
-    + '<div class="s"><b>' + hs.length + '</b><span>圆孔数</span></div>'
-    + '<div class="s"><b>' + (DWG.name || '—') + '</b><span>来源</span></div>'
+    + '<div class="s"><b>' + cs.length + '</b><span>轮廓（内 ' + inner + '）</span></div>'
+    + '<div class="s"><b>' + hs.length + '</b><span>圆孔</span></div>'
+    + '<div class="s"><b>' + (prims.length ? (prims.length + ' / 弧 ' + arcs) : '—') + '</b><span>图元 / 圆弧</span></div>'
+    + '<div class="s"><b>' + (DWG.kind === 'svg' ? '—' : (st.closed ? '闭合' : '未闭合')) + '</b><span>轮廓闭合</span></div>'
     + '</div>'
-    + '<p class="hint">识别方式：' + src + '</p>';
-  const w = [], bad = [];
-  (ir.warn || []).forEach(t=>w.push(t));
-  if(w.length){
+    + '<p class="hint">来源：' + src + (DWG.name ? '　·　' + esc(DWG.name) : '') + '</p>';
+
+  const checks = (DWG.checks || []);
+  const errs = checks.filter(x=>x.lv === 'error'), wrns = checks.filter(x=>x.lv !== 'error');
+  if(errs.length){
+    h += '<div class="issue error"><span class="lv">错误</span><span class="msg">'
+      + errs.map(x=>esc(x.msg)).join('<br>') + '</span><span class="rule">图纸</span></div>';
+  }
+  const tail = wrns.concat((ir.warn || []).map(t=>({msg:t})));
+  if(tail.length){
     h += '<div class="issue warn"><span class="lv">注意</span><span class="msg">'
-      + w.map(esc).join('<br>') + '</span><span class="rule">图纸</span></div>';
+      + tail.map(x=>esc(x.msg)).join('<br>') + '</span><span class="rule">图纸</span></div>';
+  }
+
+  if(prims.length){
+    const rows = prims.map((p,i)=>'<tr><td class="n">' + (i+1) + '</td><td>' + p.kind
+      + '</td><td style="font-family:var(--mono);font-size:12px">' + esc(dwgPrimText(p)) + '</td>'
+      + '<td class="n">' + dwgPrimLen(p).toFixed(2) + '</td></tr>').join('');
+    h += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0">'
+      + '图元清单（' + prims.length + ' 条，逐条核对 R 值与坐标）</summary>'
+      + '<div style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px">'
+      + '<table><thead><tr><th style="width:44px">#</th><th style="width:72px">类型</th><th>参数</th><th style="width:72px">长度</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table></div></details>';
+  }
+
+  if((DWG.dims || []).length){
+    const rows = DWG.dims.filter(d=>d && d.value > 0).slice(0, 12).map(d=>{
+      const v = Number(d.value);
+      const hit = Math.abs(ir.size.w - v) <= 0.6 || Math.abs(ir.size.h - v) <= 0.6;
+      return '<tr><td style="font-family:var(--mono);font-size:12px">' + esc(String(d.text || '')) + '</td>'
+        + '<td class="n">' + v + '</td><td>' + (hit ? '与外形一致' : '不是外形尺寸') + '</td></tr>';
+    }).join('');
+    h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0">'
+      + '图上标注（' + DWG.dims.length + ' 条，取原文）</summary>'
+      + '<div style="border:1px solid var(--line);border-radius:8px;margin-top:8px">'
+      + '<table><thead><tr><th>图上原文</th><th style="width:80px">数值</th><th style="width:110px">与外形</th></tr></thead><tbody>'
+      + rows + '</tbody></table></div></details>';
+  }
+
+  if(DWG.svg){
+    h += '<div class="row" style="margin-top:10px"><button class="ghost" id="dw-get-svg">下载 SVG</button>'
+      + '<span class="hint" style="align-self:center">这份 SVG 就是中间产物，可存档、可复用</span></div>';
   }
   box.innerHTML = h;
+
+  const btn = document.getElementById('dw-get-svg');
+  if(btn) btn.onclick = ()=>{
+    const blob = new Blob([DWG.svg], {type:'image/svg+xml'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (DWG.name || 'drawing').replace(/\.[^.]+$/, '') + '.svg';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  };
 }
 
 function dwgDrawPath(res){
@@ -5007,26 +5191,66 @@ async function dwgHandleFile(file){
   if(file.size > 8*1024*1024){ dwgSetStatus('文件超过 8 MB，请先压缩', true); return; }
 
   DWG.busy = true;
-  DWG.ir = null; DWG.code = ''; DWG.meta = null;
+  DWG.ir = null; DWG.baseIR = null; DWG.code = ''; DWG.meta = null;
+  DWG.prims = null; DWG.svg = ''; DWG.dims = []; DWG.stats = null; DWG.checks = [];
   document.getElementById('dwg-out').style.display = 'none';
   document.getElementById('btn-dwg-gen').disabled = true;
-  dwgSetStatus(isSvg ? '正在解析矢量轮廓…' : '正在调用视觉模型识别（需联网，约 10~30 秒）…');
+  dwgSetStatus(isSvg ? '正在解析矢量轮廓…' : '正在解析图纸 → 图元（需联网，约 20~60 秒）…');
 
   try{
-    let r;
     if(isSvg){
-      r = parseSvgIR(await dwgReadText(file));
+      const r = parseSvgIR(await dwgReadText(file));
+      if(!r.ok){ dwgSetStatus('解析失败：' + r.error, true); return; }
+      DWG.kind = 'svg';
+      DWG.ir = r.ir;
+      DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
+      DWG.svg = '';
     } else {
-      r = await dwgRasterToIR(file);
+      // 图 → 图元 → SVG → 轮廓：每一步都可验证
+      const v = await dwgRasterToPrims(file);
+      const ps = dwgPrimsToSvg(v.prims);
+      if(!ps.ok){ dwgSetStatus('失败：' + ps.error, true); return; }
+      const r = parseSvgIR(ps.svg);
+      if(!r.ok){ dwgSetStatus('图元合成 SVG 后解析失败：' + r.error, true); return; }
+
+      const checks = [];
+      if(!ps.closed){
+        checks.push({lv:'error', code:'S01', msg:'轮廓未闭合，首尾差 ' + ps.closeGap + ' mm —— 图元有缺失或端点对不上'});
+      }
+      ps.gaps.forEach(g=>{
+        checks.push({lv:'warn', code:'S01', msg:'第 ' + g.at + ' 段接缝有 ' + g.gap + ' mm 缺口（已自动接上）'});
+      });
+      r.ir.contours.forEach((c2, i)=>{
+        const hits = dwgSelfIntersect(c2.pts);
+        if(hits > 0) checks.push({lv:'error', code:'S02', msg:'轮廓 ' + (i+1) + ' 自交 ' + hits + ' 处，图元参数可能有误'});
+      });
+      dwgDimsCheck(r.ir, v.dims).forEach(x=>checks.push(x));
+      if(v.confidence !== null && v.confidence < 0.7){
+        checks.push({lv:'warn', code:'S00', msg:'模型自评可信度较低（' + v.confidence + '），务必逐条核对图元表'});
+      }
+      if(v.view) checks.push({lv:'info', code:'S00', msg:'采用的视图：' + v.view});
+      if(v.notes) checks.push({lv:'info', code:'S00', msg:'模型说明：' + v.notes});
+
+      DWG.kind = 'raster';
+      DWG.prims = ps.prims;
+      DWG.svg = ps.svg;
+      DWG.dims = v.dims || [];
+      DWG.stats = {closed: ps.closed, closeGap: ps.closeGap, gaps: ps.gaps.length, size: ps.size};
+      DWG.checks = checks;
+      DWG.ir = r.ir;
+      DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
     }
-    if(!r.ok){ dwgSetStatus('解析失败：' + r.error, true); return; }
-    DWG.ir = r.ir;
-    DWG.baseIR = JSON.parse(JSON.stringify(r.ir));  // 基准副本，供每次生成时派生
     DWG.name = file.name;
     dwgRenderSummary();
-    document.getElementById('btn-dwg-gen').disabled = false;
-    const cs = (r.ir.contours || []).length, hs = (r.ir.holes || []).length;
-    dwgSetStatus('已识别 ' + cs + ' 条轮廓、' + hs + ' 个孔，可生成程序');
+    const bad = (DWG.checks || []).filter(x=>x.lv === 'error').length;
+    const cs = (DWG.ir.contours || []).length, hs = (DWG.ir.holes || []).length;
+    if(bad){
+      dwgSetStatus('解析出 ' + cs + ' 条轮廓、' + hs + ' 个孔，但有 ' + bad + ' 个阻断问题，先看提示', true);
+    } else {
+      document.getElementById('btn-dwg-gen').disabled = false;
+      dwgSetStatus('已解析 ' + cs + ' 条轮廓、' + hs + ' 个孔'
+        + (DWG.prims ? '（' + DWG.prims.length + ' 个图元）' : '') + '，可生成程序');
+    }
   }catch(e){
     dwgSetStatus('失败：' + (e && e.message ? e.message : e), true);
   }finally{

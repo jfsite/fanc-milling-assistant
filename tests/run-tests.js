@@ -46,7 +46,7 @@ fs.writeFileSync(modPath,
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
-     + ' dwgNormalizeRaster, dwgBBox};');
+     + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -419,33 +419,72 @@ ok('围栏 + 后缀说明可解析',
 
 ok('无 location 环境（Node/测试）下版本自检不报错', catchErr(()=>{ M.checkUpdate(); }) === null);
 
-// --- 12. 位图后处理：毛坯剔除 + 尺寸校准 ---
-const bigSquare = {role:'outer', pts:[[0,0],[80,0],[80,80],[0,80]], closed:true};
-const wavy = {role:'outer', pts:[[2,2],[78,2],[78,78],[2,78]], closed:true};
-const nr1 = M.dwgNormalizeRaster([bigSquare, wavy], [], {blank:{w:80,h:80}, dims:{w:78,h:78,text:'78 -0.05'}, warn:[]});
-ok('毛坯外框按 blank 剔除', nr1.ir.contours.length === 1, nr1.ir.contours.length);
-ok('剔除后按标注 78 校准', near(nr1.ir.size.w, 78, 1e-3) && near(nr1.ir.size.h, 78, 1e-3), nr1.ir.size);
-ok('校准后轮廓外框到 78', near(M.dwgBBox(nr1.ir.contours[0].pts).maxX, 78, 0.01), M.dwgBBox(nr1.ir.contours[0].pts));
-ok('提示里说明忽略了毛坯', nr1.ir.warn.join('').indexOf('毛坯') >= 0);
-ok('提示里写明倍率', nr1.ir.warn.join('').indexOf('倍率') >= 0);
+// --- 12. 图纸 → 图元 → SVG ---
+const RECT4 = [
+  {type:'line', x1:0,  y1:0,  x2:80, y2:0},
+  {type:'line', x1:80, y1:0,  x2:80, y2:40},
+  {type:'line', x1:80, y1:40, x2:0,  y2:40},
+  {type:'line', x1:0,  y1:40, x2:0,  y2:0}
+];
+const ps1 = M.dwgPrimsToSvg(RECT4);
+ok('四条直线合成 SVG', ps1.ok === true, ps1.error);
+ok('矩形轮廓闭合', ps1.closed === true && ps1.closeGap === 0, ps1.closeGap);
+ok('SVG 尺寸 80×40', near(ps1.size.w, 80, 1e-6) && near(ps1.size.h, 40, 1e-6), ps1.size);
 
-const nr2 = M.dwgNormalizeRaster([wavy], [], {warn:[]});
-ok('无标注时不缩放且提示核对', near(nr2.ir.size.w, 76, 1e-6) && nr2.ir.warn.join('').indexOf('必须') >= 0, nr2.ir.size);
+const back1 = M.parseSvgIR(ps1.svg);
+ok('SVG 能被自己的解析器读回', back1.ok === true, back1.error);
+ok('读回后尺寸仍为 80×40', near(back1.ir.size.w, 80, 1e-6) && near(back1.ir.size.h, 40, 1e-6), back1.ir.size);
+ok('读回后是 1 条闭合轮廓', back1.ir.contours.length === 1);
 
-// 标注长宽比与轮廓不符时要提示
-const tall = {role:'outer', pts:[[0,0],[40,0],[40,100],[0,100]], closed:true};
-const nr3 = M.dwgNormalizeRaster([tall], [], {dims:{w:80,h:80,text:'80'}, warn:[]});
-ok('长宽比不符时给出警告', nr3.ir.warn.join('').indexOf('长宽比') >= 0, nr3.ir.warn);
-ok('长宽比不符时不缩放', near(M.dwgBBox(nr3.ir.contours[0].pts).maxX, 40, 0.01), M.dwgBBox(nr3.ir.contours[0].pts));
+// 乱序图元也要能串起来
+const SHUFFLED = [RECT4[2], RECT4[0], RECT4[3], RECT4[1]];
+const ps2 = M.dwgPrimsToSvg(SHUFFLED);
+ok('乱序图元自动串接成闭合', ps2.closed === true && ps2.gaps.length === 0, {closed:ps2.closed, gaps:ps2.gaps});
 
-// 没有引用标注原文的尺寸一律不采信（防模型编造）
-const nr5 = M.dwgNormalizeRaster([wavy], [], {dims:{w:50,h:50}, warn:[]});
-ok('无原文证据的尺寸不用于校准', near(nr5.ir.size.w, 76, 1e-6), nr5.ir.size);
-ok('无原文证据时给出提示', nr5.ir.warn.join('').indexOf('没有引用图上标注原文') >= 0, nr5.ir.warn);
+// 半圆 + 直径：验证圆弧角度与 Y 翻转
+const HALF = [
+  {type:'arc', cx:0, cy:0, r:10, a0:0, a1:180},
+  {type:'line', x1:-10, y1:0, x2:10, y2:0}
+];
+const ps3 = M.dwgPrimsToSvg(HALF);
+ok('半圆 + 直径闭合', ps3.ok && ps3.closed, ps3.closeGap);
+ok('半圆外形 20×10', near(ps3.size.w, 20, 1e-6) && near(ps3.size.h, 10, 1e-6), ps3.size);
+const back3 = M.parseSvgIR(ps3.svg);
+const area3 = back3.ok ? Math.abs(M.dwgArea(back3.ir.contours[0].pts)) : 0;
+ok('半圆面积≈157（πr²/2）', near(area3, Math.PI*100/2, 2), area3);
+ok('弧长≈31.4（πr）', near(M.dwgPrimLen(M.dwgNormPrim(HALF[0])), Math.PI*10, 1e-6));
 
-// 孔随轮廓一起缩放
-const nr4 = M.dwgNormalizeRaster([wavy], [{x:40,y:40,d:6}], {dims:{w:76,h:76,text:'76'}, warn:[]});
-ok('孔随轮廓平移且按比例缩放', near(nr4.ir.holes[0].d, 6, 1e-6) && near(nr4.ir.holes[0].x, 38, 1e-6), nr4.ir.holes);
+// 缺口要报出来
+const GAPPED = [
+  {type:'line', x1:0, y1:0, x2:80, y2:0},
+  {type:'line', x1:80, y1:0, x2:80, y2:40},
+  {type:'line', x1:80, y1:40, x2:0, y2:40}
+];
+const ps4 = M.dwgPrimsToSvg(GAPPED);
+ok('开口轮廓标记未闭合', ps4.closed === false && ps4.closeGap > 39, ps4.closeGap);
+
+// 圆孔：circle 图元 → SVG 圆 → 解析成孔
+const ps5 = M.dwgPrimsToSvg(RECT4.concat([{type:'circle', cx:40, cy:20, r:4, role:'hole'}]));
+const back5 = M.parseSvgIR(ps5.svg);
+ok('圆孔被识别为 Ø8', back5.ok && back5.ir.holes.length === 1 && near(back5.ir.holes[0].d, 8, 1e-6),
+   back5.ok && back5.ir.holes);
+
+// 自交检测
+ok('矩形不自交', M.dwgSelfIntersect([[0,0],[80,0],[80,40],[0,40]]) === 0);
+ok('蝴蝶形检出 1 处自交', M.dwgSelfIntersect([[0,0],[10,10],[10,0],[0,10]]) > 0);
+
+// 尺寸一致性
+const irRect = {size:{w:80,h:40}};
+ok('标注 80 与外形相符时不告警', M.dwgDimsCheck(irRect, [{text:'80',value:80}]).length === 0);
+ok('标注 60 与外形不符时告警', M.dwgDimsCheck(irRect, [{text:'60',value:60}]).some(x=>x.code === 'S03'));
+ok('明显是别的尺寸（R100）不打扰', M.dwgDimsCheck(irRect, [{text:'R100',value:100}]).length === 0);
+
+// 生成结果仍要能过 43 条校验
+const ps6 = M.dwgPrimsToSvg(RECT4);
+const ir6 = M.parseSvgIR(ps6.svg).ir;
+const nc6 = M.irToNC(ir6, {mat:'45钢', toolD:10, depth:3, ap:1, safeZ:10});
+ok('图元链生成的程序 0 错误',
+   M.lintProgram(nc6.code, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv === 'error').length === 0);
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
