@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.7.0";
+  const APP_VERSION = "1.7.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.7.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.7.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4041,7 +4041,7 @@ document.getElementById('nav').addEventListener('click', e=>{
 const DWG = { ir:null, baseIR:null, name:'', kind:'', code:'', warn:[], busy:false,
               prims:null, svg:'', dims:[], stats:null, checks:[], meta:null };
 const DWG_TOL = 0.05;      // 圆弧离散为折线的弦高容差（mm）
-const DWG_LLM_MS = 90000;  // 视觉识别超时（真实照片常要 20~60 秒）
+const DWG_LLM_MS = 120000;  // 视觉识别超时（真实照片常要 20~60 秒）
 
 // --- 仿射变换 [a,b,c,d,e,f]：(x,y) → (a·x + c·y + e, b·x + d·y + f) ---
 function dwgMul(A, B){
@@ -4616,29 +4616,19 @@ function dwgExtractJson(text){
 // 这样几何可验证（闭合/自交/尺寸一致），不会再出现"一坨点"没法核对的情况。
 
 const DWG_SYSTEM = [
-  '你是机械制图解析助手。把图中零件的**二维轮廓**拆成几何图元，只输出 JSON，不要任何解释文字。',
-  '格式：',
-  '{"unit":"mm","confidence":0~1,"view":"采用的视图，如 俯视图",',
-  ' "primitives":[',
-  '   {"type":"line","x1":数值,"y1":数值,"x2":数值,"y2":数值},',
-  '   {"type":"arc","cx":数值,"cy":数值,"r":数值,"a0":起始角(度),"a1":终止角(度),"ccw":true或false},',
-  '   {"type":"circle","cx":数值,"cy":数值,"r":数值,"role":"hole"}',
-  ' ],',
-  ' "closed":true或false,',
-  ' "dims":[{"text":"图上印的原文，如 78 -0.05","value":数值}],',
-  ' "blank":{"w":毛坯长,"h":毛坯宽} 或 null,',
-  ' "notes":"简短中文说明"}',
-  '硬性要求：',
-  '1) 只解析俯视图里**要加工的那条闭合轮廓**。毛坯外框、图框、尺寸线、中心线、剖面线、标题栏、轴测立体图、侧视图、剖视图一律不要。',
-  '2) 外框标 80、内轮廓标 78 这种图：外框放 blank，轮廓只输出 78 那条。',
-  '3) 每条直线段一个 line，每段圆弧一个 arc；**图上标了 R 的圆弧必须用 arc 且 r 取标注值**，不许拉直成 line。',
-  '4) 角度以 X 正方向为 0°，逆时针为正；圆心/半径/起止角要能自洽（起点终点必须落在圆上）。',
-  '5) 相邻图元首尾相接，接缝误差 <0.05mm；图元顺序可以任意，本地会自动串接。',
-  '6) dims 只收录图上真的印着的尺寸（含 R 值），text 必须是原文；没印就不写，不许用基点坐标或估计值凑。',
-  '7) 坐标原点取轮廓左下角，X 向右、Y 向上，单位 mm。',
-  '8) 圆孔用 circle 且 role=hole（"4×Ø8"要输出 4 个）。',
-  '9) 照片倾斜/旋转时按文字正常方向理解，忽略页面边框、书脊阴影、手指。',
-  '10) 若图中不是二维铣削零件图（纯 3D 渲染/装配图/电路图/风景照），返回 {"error":"原因"}。'
+  '把图中零件的二维轮廓拆成几何图元。只输出 JSON：第一个字符必须是 {，最后一个字符必须是 }，不要 Markdown 围栏、不要任何解释。',
+  '{"confidence":0~1,"view":"俯视图","primitives":[',
+  ' {"type":"line","x1":,"y1":,"x2":,"y2":},',
+  ' {"type":"arc","cx":,"cy":,"r":,"a0":起始角(度),"a1":终止角(度)},',
+  ' {"type":"circle","cx":,"cy":,"r":,"role":"hole"}],',
+  '"dims":[{"text":"图上原文","value":数值}],"blank":{"w":,"h":},"notes":"一句话"}',
+  '规则：',
+  '1) 只要俯视图里要加工的那条闭合轮廓；毛坯外框放 blank（外框 80/内轮廓 78 这种图，轮廓只写 78 那条），其余视图、尺寸线、中心线、图框、标题栏全部忽略。',
+  '2) 直线用 line，圆弧用 arc 且 r 取图上标注值（标了 R100 就 r=100，不许拉直）。角度以 X 正向为 0°、逆时针为正，起止点必须落在圆上。',
+  '3) 相邻图元首尾相接，误差 <0.05mm；顺序随意，本地会自动串接。',
+  '4) dims 只收图上真印着的数字（含 R 值），text 必须是原文；没印就不写。',
+  '5) 原点取轮廓左下角，X 向右 Y 向上，单位 mm。孔用 circle 且 role=hole。',
+  '6) 照片按文字方向理解，忽略页面边框、阴影、手指。不是二维零件图就返回 {"error":"原因"}。'
 ].join('');
 
 // 归一化一个图元：统一成 {kind:'line'|'arc'|'circle', ...}
@@ -4896,8 +4886,12 @@ async function dwgRasterToPrims(file){
     throw e;
   }finally{ clearTimeout(timer); }
 
+  DWG.raw = text;
   const j = dwgExtractJson(text);
-  if(!j) throw new Error('模型返回的不是有效 JSON，请重试或用 SVG');
+  if(!j){
+    const head = String(text || '').replace(/\s+/g, ' ').slice(0, 90);
+    throw new Error('模型返回的不是有效 JSON（开头：' + (head || '空响应') + '…）');
+  }
   if(j.error) throw new Error('无法识别：' + j.error);
   const prims = Array.isArray(j.primitives) ? j.primitives : [];
   if(!prims.length) throw new Error('模型没有识别出任何几何图元，请换更清晰的图或用 SVG');
