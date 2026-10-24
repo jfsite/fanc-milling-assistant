@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-23 23:58　｜　代码版本：v1.5.0（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
+> 最后更新：2026-10-23 23:58　｜　代码版本：v1.5.1（`index.html` 858 KB，10 个面板）　｜　**已发布上线**（见 §6）
 
 ---
 
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. 五条命令
+## 2. 常用命令
 
 ```bash
 # 本地预览（改完刷新即可）
@@ -34,6 +34,9 @@ node tools/version.js --bump minor
 
 # 发版：查版本一致性 → 跑回归 → 存快照 → 提交 → 打 tag
 node tools/release.js
+
+# 界面改版后重截说明书配图（无头 Edge → 1000 宽 + 128 色，再 sync-doc --embed）
+node tools/shoot-panel.js template
 ```
 
 线上 AI 冒烟（改过 AI 相关代码才需要）：
@@ -113,7 +116,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | # | 面板 | 职责 | 主要实现 |
 |---|---|---|---|
 | 1 | G/M 代码速查 | 51 条指令（39 G + 12 M），搜索 + 10 个筛选标签 | `GCODES` `MCODES` `renderTable()` |
-| 2 | 程序骨架 | 6 个模板 + 编辑器（插入头尾 / 复制 / 解释） | `TEMPLATES` `HEADER` `TAIL` |
+| 2 | 程序编辑器 | 6 个模板（模板库）+ 编辑器（插入头尾 / 复制 / 解释） | `TEMPLATES` `HEADER` `TAIL` |
 | 3 | 参数计算 | n / F / Q / Pc / Pm，材料联动，超转速折算 | `MATERIALS` `doCalc()` `calcSyncVc()` |
 | 4 | 程序解释 | 逐行翻译，地址字按上下文释义，宏语句单列 | `tokenize()` `describeAddr()` `explainMacro()` `runExplain()` |
 | 5 | 程序校验 | 43 条规则（21 E / 16 W / 6 I）+ 宏程序试算器 | `lintProgram()` `RULE_DOC` `issuesHtml()` `runMacro()` |
@@ -331,6 +334,7 @@ fanc-milling-app/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
 │  ├─ version.js         版本号查一致性 / 递增 / 同步
 │  ├─ release.js         发版：检查 + 快照 + tag（三道闸门）
+│  ├─ shoot-panel.js     重截某个面板的说明书配图
 │  ├─ make-qrcode.py     生成发布链接二维码卡片
 │  └─ smoke-ai.js        线上 AI 模块冒烟（CDP 驱动无头 Edge）
 └─ .git                  提交 63a00fa（首版）/ v1.4 / v1.5.0
