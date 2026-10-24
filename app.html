@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.6.4";
+  const APP_VERSION = "1.6.5";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.6.4 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.6.5 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4546,14 +4546,52 @@ function dwgCheck(ir, opt){
 }
 
 // --- 从模型回复里抠 JSON ---
+// 从模型回复里抠出 JSON：模型经常夹解释、多个代码块、或只输出半个对象，
+// 所以按「平衡括号」把候选片段都取出来，从长到短逐个试。
 function dwgExtractJson(text){
   if(!text) return null;
-  let s = String(text).trim();
-  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s);
-  if(fence) s = fence[1].trim();
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if(a < 0 || b <= a) return null;
-  try { return JSON.parse(s.slice(a, b+1)); } catch(e) { return null; }
+  const src = String(text);
+  const cands = [];
+
+  // 1) 优先取代码围栏里的内容
+  const fence = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let f;
+  while((f = fence.exec(src))){
+    const t = f[1].trim();
+    try { cands.push(JSON.parse(t)); } catch(e){ /* 留待片段解析 */ }
+    cands.push(t);
+  }
+
+  // 2) 扫所有平衡花括号片段
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for(let i = 0; i < src.length; i++){
+    const ch = src[i];
+    if(inStr){
+      if(esc) esc = false;
+      else if(ch === '\\') esc = true;
+      else if(ch === '"') inStr = false;
+      continue;
+    }
+    if(ch === '"'){ inStr = true; continue; }
+    if(ch === '{'){ if(depth === 0) start = i; depth++; }
+    else if(ch === '}'){ if(depth > 0){ depth--; if(depth === 0 && start >= 0) cands.push(src.slice(start, i + 1)); } }
+  }
+
+  // 3) 先看已是对象的，再按长度从大到小试解析
+  const objs = cands.filter(x=>x && typeof x === 'object');
+  for(const o of objs){
+    if(o.contours || o.holes || o.error) return o;
+  }
+  const texts = cands.filter(x=>typeof x === 'string').sort((p,q)=>q.length - p.length);
+  for(const t of texts){
+    let o;
+    try { o = JSON.parse(t); } catch(e){ continue; }
+    if(o && (o.contours || o.holes || o.error)) return o;
+  }
+  for(const t of texts){
+    try { return JSON.parse(t); } catch(e){ /* 继续 */ }
+  }
+  return null;
 }
 
 // --- 位图：视觉模型识别 → IR ---

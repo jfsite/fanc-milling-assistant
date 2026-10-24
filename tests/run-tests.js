@@ -408,6 +408,14 @@ ok('铣圆版本 0 错误', DLR4.issues.filter(x=>x.lv === 'error').length === 0
 ok('围栏 JSON 可解析', (M.dwgExtractJson('```json\n{"a":1}\n```') || {}).a === 1);
 ok('夹在文字里也能解析', (M.dwgExtractJson('结果如下 {"a":2} 完毕') || {}).a === 2);
 ok('非法 JSON 返回 null', M.dwgExtractJson('抱歉，我无法识别') === null);
+ok('多个 JSON 块时取含 contours 的那个',
+   (M.dwgExtractJson('先说明 {"note":"x"} 然后 {"contours":[{"points":[[0,0],[1,0],[1,1]]}],"holes":[]}') || {}).contours !== undefined);
+ok('JSON 后有解释文字也能取',
+   (M.dwgExtractJson('{"contours":[],"holes":[{"x":1,"y":2,"d":3}]}\n以上是识别结果，请核对。') || {}).holes.length === 1);
+ok('字符串里带花括号不打断平衡扫描',
+   (M.dwgExtractJson('{"notes":"图上写着 {R6} 和 (90\u00b0)","contours":[],"holes":[]}') || {}).notes.indexOf('R6') > 0);
+ok('围栏 + 后缀说明可解析',
+   (M.dwgExtractJson('\u597d\u7684\uff1a\n```json\n{"contours":[],"holes":[]}\n```\n\u4ee5\u4e0a') || {}).contours !== undefined);
 
 ok('无 location 环境（Node/测试）下版本自检不报错', catchErr(()=>{ M.checkUpdate(); }) === null);
 
