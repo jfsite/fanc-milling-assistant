@@ -45,7 +45,8 @@ fs.writeFileSync(modPath,
      + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
-     + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate};');
+     + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
+     + ' dwgNormalizeRaster, dwgBBox};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -409,6 +410,28 @@ ok('夹在文字里也能解析', (M.dwgExtractJson('结果如下 {"a":2} 完毕
 ok('非法 JSON 返回 null', M.dwgExtractJson('抱歉，我无法识别') === null);
 
 ok('无 location 环境（Node/测试）下版本自检不报错', catchErr(()=>{ M.checkUpdate(); }) === null);
+
+// --- 12. 位图后处理：毛坯剔除 + 尺寸校准 ---
+const bigSquare = {role:'outer', pts:[[0,0],[80,0],[80,80],[0,80]], closed:true};
+const wavy = {role:'outer', pts:[[2,2],[78,2],[78,78],[2,78]], closed:true};
+const nr1 = M.dwgNormalizeRaster([bigSquare, wavy], [], {blank:{w:80,h:80}, dims:{w:78,h:78}, warn:[]});
+ok('毛坯外框按 blank 剔除', nr1.ir.contours.length === 1, nr1.ir.contours.length);
+ok('剔除后按标注 78 校准', near(nr1.ir.size.w, 78, 1e-3) && near(nr1.ir.size.h, 78, 1e-3), nr1.ir.size);
+ok('校准后轮廓外框到 78', near(M.dwgBBox(nr1.ir.contours[0].pts).maxX, 78, 0.01), M.dwgBBox(nr1.ir.contours[0].pts));
+ok('提示里说明忽略了毛坯', nr1.ir.warn.join('').indexOf('毛坯') >= 0);
+ok('提示里写明倍率', nr1.ir.warn.join('').indexOf('倍率') >= 0);
+
+const nr2 = M.dwgNormalizeRaster([wavy], [], {warn:[]});
+ok('无标注时不缩放且提示核对', near(nr2.ir.size.w, 76, 1e-6) && nr2.ir.warn.join('').indexOf('必须') >= 0, nr2.ir.size);
+
+// 标注长宽比与轮廓不符时要提示
+const tall = {role:'outer', pts:[[0,0],[40,0],[40,100],[0,100]], closed:true};
+const nr3 = M.dwgNormalizeRaster([tall], [], {dims:{w:80,h:80}, warn:[]});
+ok('长宽比不符时给出警告', nr3.ir.warn.join('').indexOf('长宽比') >= 0, nr3.ir.warn);
+
+// 孔随轮廓一起缩放
+const nr4 = M.dwgNormalizeRaster([wavy], [{x:40,y:40,d:6}], {dims:{w:76,h:76}, warn:[]});
+ok('孔随轮廓平移且按比例缩放', near(nr4.ir.holes[0].d, 6, 1e-6) && near(nr4.ir.holes[0].x, 38, 1e-6), nr4.ir.holes);
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

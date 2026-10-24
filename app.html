@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.6.2";
+  const APP_VERSION = "1.6.3";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -543,6 +543,11 @@
         <div class="field"><label>毛坯长 (mm，可空)</label><input id="dw-bw" type="number" placeholder="仅用于超程检查"></div>
         <div class="field"><label>毛坯宽 (mm，可空)</label><input id="dw-bh" type="number" placeholder="仅用于超程检查"></div>
       </div>
+      <div class="row" style="margin-bottom:4px">
+        <div class="field"><label>零件长 (mm，可空)</label><input id="dw-pw" type="number" placeholder="按图纸标注校正比例"></div>
+        <div class="field"><label>零件宽 (mm，可空)</label><input id="dw-ph" type="number" placeholder="按图纸标注校正比例"></div>
+      </div>
+      <p class="hint" style="margin-bottom:4px">识别尺寸不准时，在这里填图纸标注的总长/总宽，生成前会等比校正（适合<b>位图识别</b>；SVG 已是精确几何，无需填写）。</p>
       <p class="hint">刀补用 G41 + D 号（D 号与 T 号相同），半径值请在机床刀补表里填 <b>刀具半径</b>。程序注释统一用英文，避免部分系统读中文报警。</p>
     </details>
     <div class="row" style="margin:12px 0">
@@ -613,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.6.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.6.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1332,7 +1337,8 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 | **SVG**（矢量） | 浏览器内本地解析 | **几何精确** | 支持 `rect` / `circle` / `ellipse` / `polygon` / `polyline` / `path`（M L H V C S Q T A Z），支持 `<g transform>`；圆弧按弦高 0.05 mm 离散成直线段 |
 | **PNG / JPG / WebP**（位图） | 云端视觉模型识别成轮廓 JSON | 需人工核对 | 需要登录发布链接、联网，且要求有支持读图的模型 |
 
-- 位图会先缩到最长边 1200 px 再送模型，文件上限 8 MB。
+- 位图会先缩到最长边 1200 px 再送模型，文件上限 8 MB；**单次识别超时 90 秒**，书页照片常要 20~60 秒。
+- 位图结果会自动做三件事：① 按模型读到的 **毛坯外框** 剔除（不当作加工轮廓）② 平移到原点 ③ 按模型读到的 **标注总长/总宽** 等比校准。任何一步做了处理都会在摘要里写明。
 - SVG 的单位按 `width`/`height` 的物理单位换算（mm/cm/in/pt/px）。只写了 `width="96"` 这类无单位值时按 96 dpi 折算，界面会提示"尺寸可能不准"。
 
 #### 10.2.2 适用的零件类型
@@ -1358,6 +1364,7 @@ G41 D01 X0 Y0 F300          ← 原文（等宽蓝字）
 | 安全高度 | 10 mm | 快移与换层时的抬刀高度 |
 | 孔加工方式 | 自动 | 孔径与刀具直径相差 ≤ max(0.3, 8%D) 用 `G81` 钻孔，否则用当前刀具铣整圆 `G02 I- J0` |
 | 毛坯长 / 宽 | 可空 | 只用于超程检查（D05） |
+| 零件长 / 宽 | 可空 | **按图纸标注校正比例**：识别尺寸不准时填这里，生成前等比缩放；位图识别必看，SVG 不需要 |
 
 坐标系与基准：
 
@@ -1428,6 +1435,11 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 | 模型返回的不是有效 JSON | 识别输出不合法，重试或改 SVG |
 | 轮廓由视觉模型识别，**必须**核对尺寸 | 位图结果只作参考，必须与图纸标注逐项比对 |
 | 模型自评可信度较低 | confidence < 0.7，建议改 SVG 或手工修正 |
+| 识别超时（90 秒未返回） | 书页照片/大图常超时：裁剪到只剩俯视图再试，或改用 SVG |
+| 已按毛坯处理并忽略 80×80 的外框 | 模型区分出了毛坯与零件轮廓，外框未参与加工 |
+| 已按图纸标注 78×78 mm 校准比例（倍率 ×0.98） | 尺寸已按标注校正，可用「零件长/宽」再手动干预 |
+| 图中未读到可用的总长/总宽标注 | 比例来自像素估算，必须手动核对或填「零件长/宽」 |
+| 标注长宽比与识别轮廓不一致 | 长宽比差 >8%，已按长度方向校准，短边需人工核对 |
 
 ### 10.3 文字生成
 
@@ -1469,7 +1481,9 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 
 - 需要联网，且依赖云端服务可用性与配额。机房断网时该模块不可用（其他 9 个模块全部离线可用）。
 - 图纸生成只做**二维轮廓 + 圆孔**：不做型腔清角、不做曲面、不做螺纹、不做多刀具多工序。
-- 位图识别的尺寸**不可信到可以直接上机**，必须以图纸标注为准逐项核对。
+- 位图识别的尺寸**不可信到可以直接上机**：即使已按标注校准总长总宽，中间特征（圆角、圆弧、孔位）仍是模型估的，必须逐项核对。
+- 一张图里既有毛坯外框又有零件轮廓时，靠模型自己区分；**认错时它会把毛坯当零件**（表现为轮廓尺寸等于毛坯尺寸），此时请在参数里填「零件长/宽」并对比摘要里的校准信息。
+- 书页照片（旋转、透视、书脊阴影）识别率明显低于电脑导出的图；实际教学建议用 SVG 或干净的 PNG 截图。
 - SVG 里被忽略的图元：`text`（尺寸数字）、`line`（标注线）、`image`、`pattern` 填充；嵌套 `<use>` 不支持。
 - 内轮廓每层都是垂直下刀，实做建议预钻孔或改用螺旋下刀。
 - 生成结果**未经真实试切验证**，必须过一遍校验和刀轨演示，首件空运行。
@@ -4008,7 +4022,8 @@ document.getElementById('nav').addEventListener('click', e=>{
 // 输出的程序一定能被「程序校验」与「刀轨演示」两个模块读懂。
 
 const DWG = { ir:null, name:'', kind:'', code:'', warn:[], busy:false };
-const DWG_TOL = 0.05; // 圆弧离散为折线的弦高容差（mm）
+const DWG_TOL = 0.05;      // 圆弧离散为折线的弦高容差（mm）
+const DWG_LLM_MS = 90000;  // 视觉识别超时（真实照片常要 20~60 秒）
 
 // --- 仿射变换 [a,b,c,d,e,f]：(x,y) → (a·x + c·y + e, b·x + d·y + f) ---
 function dwgMul(A, B){
@@ -4541,13 +4556,25 @@ function dwgExtractJson(text){
 
 // --- 位图：视觉模型识别 → IR ---
 const DWG_SYSTEM = [
-  '你是机械制图识别助手。任务：从图片中识别一个二维铣削零件的轮廓与圆孔，输出严格 JSON，不要任何多余文字。',
-  'JSON 结构：{"unit":"mm","confidence":0~1,"size":{"w":数值,"h":数值},"contours":[{"role":"outer"或"inner","points":[[x,y],...]}],"holes":[{"x":数值,"y":数值,"d":数值}],"notes":"简短中文说明"}',
-  '规则：坐标原点取零件外轮廓左下角，X 向右、Y 向上，单位 mm；',
-  'points 按逆时针或顺时针均可，但必须首尾不同点（不要重复闭合点），每条轮廓 8~80 个点，用直线段逼近，圆弧至少 8 段；',
-  '只识别零件的可见轮廓线，忽略尺寸线、中心线、剖面线、图框、标题栏、文字标注；',
-  '圆孔放 holes，d 为直径；看不清或无法确定的项不要编造，把 confidence 调低并在 notes 里说明；',
-  '如果图中不是二维铣削零件（例如三维视图、装配图、电路图、照片），返回 {"error":"原因"}。'
+  '你是机械制图识别助手。从图片中识别一个二维铣削零件要加工的轮廓与圆孔，只输出 JSON，不要任何多余文字。',
+  'JSON 结构：',
+  '{"unit":"mm","confidence":0~1,"view":"你采用的那张视图，如 俯视图",',
+  ' "dims":{"w":零件轮廓总长,"h":零件轮廓总宽} 或 null,   // 只填图上明确标注的尺寸；只有单方向标注时另一项填 null',
+  ' "blank":{"w":毛坯长,"h":毛坯宽} 或 null,              // 图中画出的毛坯/下料外框尺寸',
+  ' "contours":[{"role":"outer"或"inner","points":[[x,y],...]}],',
+  ' "holes":[{"x":数值,"y":数值,"d":数值}],',
+  ' "notes":"简短中文说明"}',
+  '关键规则（务必遵守）：',
+  '1) 只取「俯视图」这类能看出完整外形的主视图。图中有轴测立体图（3D 效果图）、侧视图、剖视图时全部忽略，只看平面轮廓那张。',
+  '2) **区分毛坯与零件轮廓**：如果图上既有矩形外框、内部又有一套曲线轮廓（常见于"外轮廓铣削"练习图，外框常标 80、内轮廓标 78 这种差值），则外框是毛坯或视图边界，**必须放进 blank，绝不能作为 contours 输出**；contours 只放真正要铣出来的形状。拿不准时看轴测图：凸起/凹下的那层形状才是零件轮廓。',
+  '3) 尺寸优先：能从标注读出的总长总宽写进 dims（如 "78 -0.05" 取 78，"80" 取 80）。公差、±、Ra、形位公差框都不要写进数值。',
+  '4) 线条即几何：粗实线是可见轮廓；细实线/虚线（尺寸线、中心线、剖面线、图框、标题栏）忽略。圆弧轮廓用足够密的点逼近（每 90° 至少 4 段，R 越小段越密）。',
+  '5) 坐标：原点取 contours 外轮廓左下角，X 向右、Y 向上，单位 mm；points 首尾不同点，每条 8~120 个点。',
+  '6) 圆孔放 holes，d 为直径（标 "4×Ø8" 时每个孔都输出，d=8）。',
+  '7) 如果图是书页照片 / 手机拍摄（倾斜、旋转、有书脊阴影）：按**文字正常方向**理解图面，忽略页面边框、手指、阴影；能读出标注就用标注校核比例。',
+  '8) 看不清或无法确定就不要编造：把 confidence 调低，在 notes 里写清哪部分不确定。',
+  '9) 若图中根本不是二维铣削零件图（纯三维渲染、装配图、电路图、风景照），返回 {"error":"具体原因"}。',
+  '示例（外轮廓铣削练习图）：外框 80×80 是毛坯、内部 78×78 带 R100/R19 曲线的是零件 → 输出 blank={w:80,h:80}，dims={w:78,h:78}，contours 只含那条曲线，role=outer。'
 ].join('');
 
 async function dwgRasterToIR(file){
@@ -4579,7 +4606,9 @@ async function dwgRasterToIR(file){
   });
 
   const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), DWG_LLM_MS);
   let text = '';
+  try {
   for await (const ch of c.llm.chat.completions.create({
     model: vis[0].id,
     messages: [
@@ -4595,6 +4624,14 @@ async function dwgRasterToIR(file){
     const d = ch.choices && ch.choices[0] && ch.choices[0].delta;
     if(d && d.content) text += d.content;
   }
+  } catch(e){
+    if(e && e.name === 'AbortError'){
+      throw new Error('识别超时（' + Math.round(DWG_LLM_MS/1000) + ' 秒未返回）。书页照片/大图容易超时，建议裁剪到只剩俯视图，或改用 SVG');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const j = dwgExtractJson(text);
   if(!j) throw new Error('模型返回的不是有效 JSON，请重试或用 SVG');
   if(j.error) throw new Error('无法识别：' + j.error);
@@ -4607,26 +4644,91 @@ async function dwgRasterToIR(file){
   const holes = (j.holes || []).map(h=>({x:+h.x, y:+h.y, d:+h.d})).filter(h=>isFinite(h.x) && isFinite(h.y) && h.d > 0);
   if(!contours.length && !holes.length) throw new Error('没识别出任何轮廓或孔，请换更清晰的图或用 SVG');
 
-  const allPts = contours.reduce((a,c2)=>a.concat(c2.pts), []);
-  const bb = allPts.length ? dwgBBox(allPts) : {minX:0, minY:0, maxX:0, maxY:0};
-  const shift = (p)=>[p[0]-bb.minX, p[1]-bb.minY];
-  contours.forEach(c2=>{ c2.pts = dwgDedupe(c2.pts.map(shift)); });
-  holes.forEach(h=>{ h.x = h.x - bb.minX; h.y = h.y - bb.minY; });
-
-  const conf = typeof j.confidence === 'number' ? j.confidence : null;
   const warn = ['轮廓由视觉模型识别，**必须**与图纸标注尺寸逐项核对后再上机'];
-  if(conf !== null && conf < 0.7) warn.push('模型自评可信度较低（' + conf + '），建议改用 SVG 或手工在编辑器里修正');
-  if(j.notes) warn.push('模型说明：' + j.notes);
+  const conf = typeof j.confidence === 'number' ? j.confidence : null;
+  if(conf !== null && conf < 0.7) warn.push('模型自评可信度较低（' + conf + '），建议改用 SVG 或在编辑器里修正后核对');
+  if(j.view) warn.push('采用的视图：' + j.view);
 
-  return {
-    ok: true,
-    ir: {
-      unit: 'mm', src: 'raster',
-      size: allPts.length ? {w:+(bb.maxX-bb.minX).toFixed(3), h:+(bb.maxY-bb.minY).toFixed(3)} : {w:0, h:0},
-      contours: contours, holes: holes, warn: warn, confidence: conf
-    },
+  const norm = dwgNormalizeRaster(contours, holes, {
+    dims: j.dims || null,
+    blank: j.blank || null,
+    saidSize: j.size || null,
+    conf: conf,
     warn: warn
-  };
+  });
+  if(j.notes) warn.push('模型说明：' + j.notes);
+  return {ok: true, ir: norm.ir, warn: warn};
+}
+
+// 位图结果后处理：剔除毛坯外框 → 平移到原点 → 按标注尺寸等比校准
+function dwgNormalizeRaster(contours, holes, opt){
+  const o = opt || {};
+  const warn = o.warn || [];
+  // 深拷贝：调用方传进来的轮廓可能被复用，不能让本函数改到它
+  const clone = (x)=>JSON.parse(JSON.stringify(x));
+  const src = clone(contours || []);
+  const srcHoles = clone(holes || []);
+  let cs = src.slice();
+
+  // 1) 毛坯外框：与 blank 尺寸接近、且是最大轮廓的矩形，判为毛坯并剔除
+  const blank = o.blank && o.blank.w > 0 && o.blank.h > 0 ? o.blank : null;
+  let droppedBlank = null;
+  if(cs.length > 1){
+    const bbs = cs.map(c2=>({c:c2, b:dwgBBox(c2.pts), a:Math.abs(dwgArea(c2.pts))}));
+    bbs.sort((p,q)=>q.a - p.a);
+    const big = bbs[0];
+    const w = big.b.maxX - big.b.minX, h = big.b.maxY - big.b.minY;
+    if(blank){
+      const tolW = Math.abs(w - blank.w)/Math.max(blank.w, 1e-6);
+      const tolH = Math.abs(h - blank.h)/Math.max(blank.h, 1e-6);
+      if(tolW < 0.06 && tolH < 0.06){
+        droppedBlank = {w:+w.toFixed(2), h:+h.toFixed(2)};
+        cs = cs.filter(c2=>c2 !== big.c);
+      }
+    }
+    // 没有 blank 标注时的兜底：两个轮廓都是「直角矩形 + 明显不同尺寸」且其中一个恰好是另一套曲线，交给模型判定，不自动删
+  }
+  if(droppedBlank){
+    warn.push('已按毛坯处理并忽略 ' + droppedBlank.w + '×' + droppedBlank.h + ' 的外框（不参与加工）');
+  }
+  if(!cs.length){ cs = src.slice(); }  // 全被剔除就退回原样，避免空结果
+
+  // 2) 平移到原点（以剩下的轮廓为准）
+  const allPts = cs.reduce((acc,c2)=>acc.concat(c2.pts), []);
+  const bb = allPts.length ? dwgBBox(allPts) : {minX:0, minY:0, maxX:0, maxY:0};
+  cs.forEach(c2=>{ c2.pts = dwgDedupe(c2.pts.map(p=>[p[0]-bb.minX, p[1]-bb.minY])); });
+  const hs = srcHoles.map(h=>({x:h.x-bb.minX, y:h.y-bb.minY, d:h.d}));
+
+  // 3) 按标注尺寸等比校准
+  const curW = bb.maxX - bb.minX, curH = bb.maxY - bb.minY;
+  const dims = (o.dims && o.dims.w > 0 && o.dims.h > 0) ? o.dims : null;
+  let scale = 1, target = null;
+  if(dims){
+    const sw = dims.w/curW, sh = dims.h/curH;
+    scale = sw;
+    if(Math.abs(sw - sh)/Math.max(sw, sh) > 0.08){
+      warn.push('标注长宽比与识别轮廓不一致（识别 ' + curW.toFixed(1) + '×' + curH.toFixed(1)
+        + '，标注 ' + dims.w + '×' + dims.h + '），已按长度方向校准，请核对短边尺寸');
+    }
+    target = {w:dims.w, h:dims.h};
+  }
+  cs.forEach(c2=>{ c2.pts = c2.pts.map(p=>[p[0]*scale, p[1]*scale]); });
+  const hs2 = hs.map(h=>({x:h.x*scale, y:h.y*scale, d:h.d*scale}));
+  if(dims){
+    warn.push('已按图纸标注 ' + dims.w + '×' + dims.h + ' mm 校准比例（识别原尺寸 '
+      + curW.toFixed(1) + '×' + curH.toFixed(1) + '，倍率 ×' + scale.toFixed(3) + '）');
+  } else {
+    warn.push('图中未读到可用的总长/总宽标注，尺寸按像素比例估算，**必须**手动核对');
+  }
+
+  const size = target ? {w:+target.w.toFixed(3), h:+target.h.toFixed(3)}
+                      : {w:+(curW*scale).toFixed(3), h:+(curH*scale).toFixed(3)};
+  return {ir: {
+    unit:'mm', src:'raster', size:size,
+    contours: cs, holes: hs2, warn: warn,
+    confidence: typeof o.conf === 'number' ? o.conf : null,
+    blankDropped: droppedBlank, scaled: !!dims, scale: +scale.toFixed(4)
+  }};
 }
 
 // --- 图纸编程：界面与交互 ---
@@ -4800,9 +4902,27 @@ function dwgOpt(){
   };
 }
 
+// 按用户填写的零件长/宽等比校正（以识别结果为基准，重复生成不会叠加）
+function dwgUserScaled(ir){
+  const w = numOf('dw-pw'), h = numOf('dw-ph');
+  if(!(w > 0) && !(h > 0)) return ir;
+  const cur = ir.size || {w:0, h:0};
+  let s2 = 1;
+  if(w > 0 && cur.w > 0) s2 = w/cur.w;
+  else if(h > 0 && cur.h > 0) s2 = h/cur.h;
+  if(!(s2 > 0) || Math.abs(s2 - 1) < 1e-9) return ir;
+  const out = JSON.parse(JSON.stringify(ir));
+  out.contours = (out.contours || []).map(c=>({role:c.role, closed:true, pts:c.pts.map(p=>[p[0]*s2, p[1]*s2])}));
+  out.holes = (out.holes || []).map(x=>({x:x.x*s2, y:x.y*s2, d:x.d*s2}));
+  out.size = {w:+(cur.w*s2).toFixed(3), h:+(cur.h*s2).toFixed(3)};
+  out.warn = (out.warn || []).concat(['已按你填写的手动尺寸 ' + (w>0?w:'—') + '×' + (h>0?h:'—') + ' mm 校正（倍率 ×' + s2.toFixed(3) + '）']);
+  return out;
+}
+
 function dwgGenerate(){
-  const ir = DWG.ir;
-  if(!ir){ dwgSetStatus('请先上传图纸', true); return; }
+  const base = DWG.baseIR || DWG.ir;
+  if(!base){ dwgSetStatus('请先上传图纸', true); return; }
+  const ir = dwgUserScaled(JSON.parse(JSON.stringify(base)));
   const opt = dwgOpt();
   const issues = dwgCheck(ir, opt);
   const fatal = issues.filter(x=>x.lv === 'error');
@@ -4816,6 +4936,7 @@ function dwgGenerate(){
     return;
   }
   const r = irToNC(ir, opt);
+  DWG.irUsed = ir;
   DWG.code = r.code;
   DWG.meta = r.meta;
   dwgRenderOut();
@@ -4847,6 +4968,7 @@ async function dwgHandleFile(file){
     }
     if(!r.ok){ dwgSetStatus('解析失败：' + r.error, true); return; }
     DWG.ir = r.ir;
+    DWG.baseIR = JSON.parse(JSON.stringify(r.ir));  // 基准副本，供每次生成时派生
     DWG.name = file.name;
     dwgRenderSummary();
     document.getElementById('btn-dwg-gen').disabled = false;
