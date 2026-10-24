@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.7.3";
+  const APP_VERSION = "1.7.4";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -618,7 +618,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.7.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.7.4 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -5298,8 +5298,17 @@ async function dwgHandleFile(file){
       const r = parseSvgIR(await dwgReadText(file));
       if(!r.ok){ dwgSetStatus('解析失败：' + r.error, true); return; }
       DWG.kind = 'svg';
-      DWG.ir = r.ir;
-      DWG.baseIR = JSON.parse(JSON.stringify(r.ir));
+      // 编辑过的 SVG 也可能有问题（重复线、标注线、自交），同样要检查
+      const checks = [];
+      r.ir.contours.forEach((c2, i)=>{
+        const hits = dwgSelfIntersect(c2.pts);
+        if(hits > 0) checks.push({lv:'error', code:'S02', msg:'轮廓 ' + (i+1) + ' 自交 ' + hits + ' 处，SVG 里有交叉线'});
+      });
+      if(r.ir.contours.length > 8){
+        checks.push({lv:'warn', code:'S01', msg:'解析出 ' + r.ir.contours.length
+          + ' 条轮廓，SVG 里可能混进了标注线/重复线，请只保留要加工的那条'});
+      }
+      DWG.checks = checks;
       DWG.svg = '';
     } else {
       // 图 → 图元 → SVG → 轮廓：每一步都可验证
