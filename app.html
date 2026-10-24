@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.8.1";
+  const APP_VERSION = "1.8.2";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -628,7 +628,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.8.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.8.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -5461,12 +5461,44 @@ function dwgPrimToRaw(p){
 
 function dwgReadPrimEdits(){
   const out = JSON.parse(JSON.stringify(DWG.prims || []));
+  const vals = {};
   document.querySelectorAll('.dw-pf').forEach(el=>{
-    const i = +el.dataset.i, k = el.dataset.k;
     const v = parseFloat(el.value);
-    if(!isFinite(v) || !out[i]) return;
-    if(k === 'sw'){ out[i].sw = v - out[i].a0; }
-    else out[i][k] = v;
+    if(isFinite(v)) vals[el.dataset.i + ':' + el.dataset.k] = v;
+  });
+  out.forEach((p, i)=>{
+    const get = (k)=> isFinite(vals[i + ':' + k]) ? vals[i + ':' + k] : null;
+    if(p.kind === 'arc'){
+      const rNew = get('r'), cxNew = get('cx'), cyNew = get('cy');
+      const a0New = get('a0'), a1New = get('a1');
+      const rChg = rNew !== null && Math.abs(rNew - p.r) > 1e-9;
+      const angChg = (a0New !== null && Math.abs(a0New - p.a0) > 1e-9)
+                  || (a1New !== null && Math.abs(a1New - (p.a0 + p.sw)) > 1e-9);
+      const cenChg = (cxNew !== null && Math.abs(cxNew - p.cx) > 1e-9)
+                  || (cyNew !== null && Math.abs(cyNew - p.cy) > 1e-9);
+      if(rChg && !angChg && !cenChg){
+        // 只改半径：保持两个端点不动，重算圆心（否则相邻段必然接不上）
+        const p0 = dwgPrimPt(p, 0), p1 = dwgPrimPt(p, 1);
+        const dx = p1[0]-p0[0], dy = p1[1]-p0[1];
+        const cross = dx*(p.cy - p0[1]) - dy*(p.cx - p0[0]);
+        const arc = dwgArcFrom2Pts(p0[0], p0[1], p1[0], p1[1], rNew, cross >= 0 ? 1 : -1);
+        const np = arc ? dwgNormPrim(arc) : null;
+        if(np){ out[i] = np; return; }
+      }
+      out[i] = {
+        kind:'arc',
+        cx: cxNew !== null ? cxNew : p.cx,
+        cy: cyNew !== null ? cyNew : p.cy,
+        r:  rNew !== null ? rNew : p.r,
+        a0: a0New !== null ? a0New : p.a0,
+        sw: (a1New !== null ? a1New : (p.a0 + p.sw)) - (a0New !== null ? a0New : p.a0)
+      };
+      return;
+    }
+    ['cx','cy','r','x1','y1','x2','y2'].forEach(k=>{
+      const v = get(k);
+      if(v !== null) p[k] = v;
+    });
   });
   return out;
 }
