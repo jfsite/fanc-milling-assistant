@@ -24,13 +24,24 @@ FONT_BOLD = "C:/Windows/Fonts/msyhbd.ttc"
 FONT_REG = "C:/Windows/Fonts/msyh.ttc"
 
 
+def read_app_html(root: str) -> str:
+    # v1.6.2 起应用本体在 app.html，index.html 只剩 1KB 转发层（没有版本号）
+    for name in ("app.html", "index.html"):
+        try:
+            with open(os.path.join(root, name), encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            continue
+    return ""
+
+
 def current_version(root: str) -> str:
-    try:
-        with open(os.path.join(root, "index.html"), encoding="utf-8") as f:
-            m = re.search(r'const APP_VERSION = "(\d+\.\d+\.\d+)";', f.read())
-            return m.group(1) if m else ""
-    except OSError:
-        return ""
+    m = re.search(r'const APP_VERSION = "(\d+\.\d+\.\d+)";', read_app_html(root))
+    return m.group(1) if m else ""
+
+
+def module_count(root: str) -> int:
+    return len(re.findall(r'<button data-p="[a-z]+"', read_app_html(root)))
 
 
 def main(url: str) -> None:
@@ -56,7 +67,9 @@ def main(url: str) -> None:
     tw = d.textlength(title, font=f_title)
     d.text(((W - tw) / 2, 480), title, font=f_title, fill=BLACK)
 
-    sub = "扫码即用 · 10 个模块"
+    n = module_count(root)
+    ver = current_version(root)
+    sub = "扫码即用 · " + (str(n) + " 个模块" if n else "11 个模块") + ((" · v" + ver) if ver else "")
     f_sub = ImageFont.truetype(FONT_REG, 18)
     sw = d.textlength(sub, font=f_sub)
     d.text(((W - sw) / 2, 522), sub, font=f_sub, fill=GRAY)
