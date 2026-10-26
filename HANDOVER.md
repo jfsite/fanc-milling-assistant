@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-26 19:30　｜　代码版本：v1.12.1（`app.html` 1.50 MB / 1,496,219 字节，11 个面板，277 项断言）　｜　线上仍是 v1.9.2（v1.10.0 ~ v1.12.1 **均未发布**，见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
+> 最后更新：2026-10-26 19:45　｜　代码版本：v1.12.2（`app.html` 1.50 MB / 1,496,543 字节，11 个面板，277 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
 
 ---
 
@@ -264,8 +264,8 @@ node tools/release.js                                  # 3. 快照 + tag
 | 分享链接（对外分发用这个） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI&v=1.6.0` |
 | 裸链接（会命中旧缓存，别发） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
 | 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
-| 线上内容（v1.6.0） | 958,555 字节 = 本地 `app.html` 字节数完全一致，标题「FANUC 铣削编程助手（W版） · v1.6.0」 |
-| 二维码 | `qrcode.png`（492×630）编码 **带 `&v=` 的链接**，由 `tools/make-qrcode.py` 按当前版本自动生成 |
+| 线上内容（v1.12.2） | 1,496,543 字节 = 本地 `app.html` 完全等长，徽标 `v1.12.2`；`version.json` 同为 1.12.2（需带 sharecode 才能取到） |
+| 二维码 | `qrcode.png`（492×630）编码 `…/app.html?sharecode=OTD3JQJQPI`，副标题显示「11 个模块 · v1.12.2」，由 `tools/make-qrcode.py` 自动生成 |
 
 **注意：链接必须带 `?sharecode=OTD3JQJQPI`**，且**对外分发要再带 `&v=<版本>`**。原因见下。
 
@@ -448,7 +448,9 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 | 找错练习注入 | 变异匹配到程序头的初始化 `G40/G49/G80` 会造出假错误 | 变异正则用行首匹配 `^\s*G40\b` |
 | 圆弧整圆 | 终点=起点被「零位移」判断跳过 | 仅当无 I/J 时才跳过 |
 | 分支漏写共享状态 | SVG 上传后按钮永远灰：`DWG.ir` 一直是 `null`，报 `Cannot read properties of null (reading 'contours')` | 分支里除了 checks 还要写回 `DWG.ir` / `baseIR`；测试里加了源码契约断言 |
-| sticky + 长图截图 | 导航被画在长图中途，像"页面中间又出现一条导航" | 截图前 `window.scrollTo(0,0)` |
+| sticky + 长图截图 | 导航被画在长图中途，像"页面中间又出现一条导航"；当前项还会上下错位 | 截图前 `window.scrollTo(0,0)` **并把 `nav.style.position` 改成 `static`** |
+| 静态资源要带 sharecode | `fetch('version.json')` 这类相对路径会丢掉页面 URL 的查询串，线上返回「链接不完整」HTML → 版本自检静默失效 | 请求时显式拼 `location.search`（`version.json?sharecode=…&ts=`） |
+| 工具读错版本源 | `make-qrcode.py` 从 `index.html` 取版本号，v1.6.2 起那里没有版本号 → 卡片副标题空着 | 工具一律从 `app.html` 读 `APP_VERSION` |
 
 ---
 

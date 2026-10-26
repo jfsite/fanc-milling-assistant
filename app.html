@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.12.1";
+  const APP_VERSION = "1.12.2";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -926,7 +926,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.12.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.12.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -6432,7 +6432,10 @@ function checkUpdate(){
     if(now - last < 30*60*1000) return; // 半小时内只查一次
     localStorage.setItem(K, String(now));
   }catch(e){}
-  fetch('version.json?ts=' + now, {cache:'no-store'})
+  // 平台要求带 sharecode 才能取到静态资源，相对路径会丢掉原 URL 的查询串，
+  // 所以这里把当前页面的 ?sharecode=… 显式带上，否则拿到的是"链接不完整"页面
+  const q = (typeof location !== 'undefined' && location.search) ? location.search.slice(1) + '&' : '';
+  fetch('version.json?' + q + 'ts=' + now, {cache:'no-store'})
     .then(r=> r.ok ? r.json() : null)
     .then(j=>{ if(j && j.v && j.v !== APP_VERSION) showUpdateBar(j.v); })
     .catch(()=>{});
