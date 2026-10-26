@@ -95,7 +95,8 @@ print('saved %s %s' % (dst, Image.open(dst).size))
 
   const shot = async (name, clip) => {
     await ev("document.activeElement && document.activeElement.blur()");
-    await ev("window.scrollTo(0,0)");
+    // sticky 导航在长图截图里会错位：截图期间改成 static
+    await ev("window.scrollTo(0,0); var n=document.getElementById('nav'); if(n) n.style.position='static';");
     await sleep(400);
     const params = { format: 'png', captureBeyondViewport: true };
     if (clip) params.clip = clip;
