@@ -491,7 +491,7 @@ fanc-milling-app/
 |---|---|
 | 远端 | `git@github.com:jfsite/fanc-milling-assistant.git`（**私有**仓库） |
 | 分支 | `main` |
-| 标签 | 每个发版一个 `vX.Y.Z`（v1.0.0 ~ v1.9.2 已推） |
+| 标签 | 每个**已发布**版本一个 `vX.Y.Z`；v1.0.0 ~ v1.9.2 与 v1.12.1、v1.12.2 已推。v1.10.0 ~ v1.12.0 只在本机迭代、从未发布，因此没有 tag |
 | 认证 | 本机 SSH 公钥（`~/.ssh/id_rsa.pub`，已在 GitHub 登记为 `jfsite`） |
 
 日常推送：
