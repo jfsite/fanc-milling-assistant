@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-24 22:20　｜　代码版本：v1.10.0（`app.html` 1.40 MB / 1,399,645 字节，11 个面板，275 项断言）　｜　线上仍是 v1.9.2（v1.10.0 **未发布**，见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
+> 最后更新：2026-10-26 18:40　｜　代码版本：v1.11.0（`app.html` 1.47 MB / 1,470,331 字节，11 个面板，277 项断言）　｜　线上仍是 v1.9.2（v1.10.0 / v1.11.0 **均未发布**，见 §6）　｜　**已托管 GitHub 私有仓库**（见 §9.5）
 
 ---
 
@@ -44,7 +44,7 @@
 # 本地预览（改完刷新即可）
 python -m http.server 8765 --bind 127.0.0.1
 
-# 回归测试：275 项断言，必须 0 失败才算完成
+# 回归测试：277 项断言，必须 0 失败才算完成
 node tests/run-tests.js
 
 # 改完文档 / 换完截图后，把内容写回 app.html 的帮助面板
@@ -193,7 +193,7 @@ node tools/release.js                                  # 3. 快照 + tag
 2. 加 `<section class="panel" id="panel-xxx">`（放在 AI 面板之前）
 3. 需要样式就加到 `<style>` 末尾
 4. 在 `// ===== 初始化 =====` 之前写逻辑与按钮接线
-5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 275 项）
+5. 加测试到 `tests/run-tests.js`，跑通全部断言（当前 277 项）
 6. 更新 `docs/使用说明.md` 并 `node tools/sync-doc.js --embed`
 
 ---
@@ -211,6 +211,21 @@ node tools/release.js                                  # 3. 快照 + tag
 7. **圆孔直径取真实半径**，禁止用离散后的多边形包围盒凑数（内接多边形会小 1~2%，钻头下不去）。
 8. 生成的程序必须能过自己的 43 条校验：测试里有 `lintProgram(生成的程序)` 0 错误断言，改生成器后先跑这条。
 
+## 4.6 样式与响应式约定（v1.11.0 起）
+
+样式集中在 `app.html` 的**第一个 `<style>`**，约 470 行，分「设计令牌 → 基础 → 布局 → 卡片 → 表单 → 按钮 → 表格 → 小元件 → 深色代码块 → 画布 → 帮助 → 图纸 → 版本条 → 大屏 → 响应式」十四段。
+
+1. **只用令牌，不散写颜色**：`--brand / --brand-bg / --line / --line2 / --sub / --txt / --danger / --warn / --accent / --mono` 等旧名**必须保留**——HTML 里大量内联样式（`style="...var(--line)"`）和画布图例直接引用它们。
+2. **画布颜色不在 CSS 里**：刀轨蓝线、橙色点线、红圈、灰虚线都写死在 `drawPath` / `drawCompare` / `dwgDrawPath` 的 JS 里，`.legend` 的 `<i style="border-color:#185fa5">` 也是内联。**改品牌色必须同时改这两处**，否则图例和实际线条对不上。
+3. **宽表格必须进 `.tbl-scroll`**：容器负责横滑 + 边缘淡阴影（`background-attachment:local` 那套），表再给 `min-width`（手机断点里）。直接把表 `display:block` 会把列压扁（试过，名称输入框只剩 10px）。
+4. **grid 子项一律 `minmax(0,1fr)`**：`.help-wrap` / `.path-split` 曾用 `1fr`，帮助面板里的长表格把整页撑宽 2000px。`min-width:auto` 是 grid 的默认值，是坑。
+5. **断点只有四个**：1100 / 900 / 720 / 420。720 是"单列手机"，900 是"堆叠平板"。
+6. **按钮与输入统一 40px 高**（手机 44px），新增控件跟着走，不要自带 padding。
+7. **`.notice` 是全局固定 toast**（顶部居中，2s 消失），页面里只有这一个元素，不要挪进卡片。
+8. **改完样式必须重拍配图**：`node tools/reshoot-docs.js` 一次拍完带数据的 11 张；单张用 `node tools/shoot-panel.js <panel>`。
+   `docs/img/gaps-real.png` 是真实识别结果，不重拍。
+9. **长图截图前必须 `window.scrollTo(0,0)`**：导航是 `position:sticky`，`captureBeyondViewport` 会把它按当前滚动位置画在长图中间（AI 那张就这样翻过车）。两个截图脚本已内置。
+
 ## 5. 必须守住的约定
 
 这些是踩过坑之后定下来的，改动前先看：
@@ -223,9 +238,10 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：275 项，0 失败。
+7. **测试全绿才算完成**：277 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
+10. **样式改动只动令牌与断点**：不要在 HTML 里追加新的内联颜色/圆角；确需特例（如截图脚本要用的尺寸）写进 `<style>` 并注释原因。
 
 ---
 
@@ -422,6 +438,8 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 | 改名目录 | `mv` 报 `Device or resource busy` | 先停掉占用目录的 `http.server`（TaskStop） |
 | 找错练习注入 | 变异匹配到程序头的初始化 `G40/G49/G80` 会造出假错误 | 变异正则用行首匹配 `^\s*G40\b` |
 | 圆弧整圆 | 终点=起点被「零位移」判断跳过 | 仅当无 I/J 时才跳过 |
+| 分支漏写共享状态 | SVG 上传后按钮永远灰：`DWG.ir` 一直是 `null`，报 `Cannot read properties of null (reading 'contours')` | 分支里除了 checks 还要写回 `DWG.ir` / `baseIR`；测试里加了源码契约断言 |
+| sticky + 长图截图 | 导航被画在长图中途，像"页面中间又出现一条导航" | 截图前 `window.scrollTo(0,0)` |
 
 ---
 
@@ -429,7 +447,7 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 
 ```
 fanc-milling-app/
-├─ app.html            1.4 MB，应用本体（11 面板 + 内嵌文档 + 13 图）
+├─ app.html            1.45 MB，应用本体（11 面板 + 内嵌文档 + 13 图）
 ├─ index.html          1 KB 入口转发层（永不变，别往里加东西）
 ├─ version.json        当前线上版本，应用用它做版本自检
 ├─ qrcode.png            二维码（指向当前线上链接，含 sharecode）
@@ -441,7 +459,7 @@ fanc-milling-app/
 │  ├─ img/               11 张截图（panel-*.png）
 │  ├─ samples/           图纸示例（part-60x40.svg）
 │  └─ history/           历史工作日志
-├─ tests/run-tests.js    275 项断言，Node 直接跑，无需浏览器
+├─ tests/run-tests.js    277 项断言，Node 直接跑，无需浏览器
 ├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步

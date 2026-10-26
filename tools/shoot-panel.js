@@ -111,6 +111,9 @@ const doGen = args.includes('--gen');
       }
     }
     await sleep(300);
+    // 长图截图前回到顶部：否则 sticky 导航会按当前滚动位置画在页面中间
+    await send('Runtime.evaluate', { expression: 'window.scrollTo(0,0)', returnByValue: true });
+    await sleep(200);
 
     const shot = await send('Page.captureScreenshot', {
       format: 'png', captureBeyondViewport: true,

@@ -628,6 +628,11 @@ ok('CSV 表头与行数', csv[0] === 'T号,名称,直径,刃数,补偿半径(D�
 ok('CSV 名称带引号封装', csv[1].indexOf('"Φ10 立铣刀"') > 0, csv[1]);
 ok('CSV 引号转义', M.toolCsv([{t:'01', d:10, name:'带"引号"的刀'}]).split('\n')[1].indexOf('""') > 0);
 
+// SVG 上传分支必须把解析结果写回 DWG（v1.9.0 曾漏写，导致「生成程序」永远不可用）
+const svgBranch = js.slice(js.indexOf('if(isSvg){'), js.indexOf('} else {', js.indexOf('if(isSvg){')));
+ok('SVG 分支写回 DWG.ir', /DWG\.ir\s*=\s*r\.ir/.test(svgBranch));
+ok('SVG 分支写回 DWG.baseIR', /DWG\.baseIR\s*=\s*JSON\.parse/.test(svgBranch));
+
 // 下拉取值：空串必须是"手填"，不能误取第 0 把
 ok('空选择不取刀', M.toolAt('') === null && M.toolAt(null) === null);
 ok('下标越界返回 null', M.toolAt('99') === null);
