@@ -358,6 +358,7 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 
 | 优先级 | 项 | 说明 | 难度 |
 |---|---|---|---|
+| 高 | **界面方案选型** | 三套配色/布局方案已出图：`docs/proposals/ui-schemes.html`（同一份 DOM 渲染三套令牌，可直接对比）。选定后只改 `:root` 令牌 + 三处栅格；C 方案还要动导航结构 | 低 |
 | 高 | 题库 + 自动判分 | 按知识点出题，学生交程序自动判分定位；题目内容需手写 20~30 道 | 中（难在内容） |
 | 中 | 2D 材料去除 | 毛坯矩形减扫掠区域，看过切/欠切 | 中高 |
 | 中 | 宏程序 → 普通 G 代码展开 | 逐行展开结果，讲宏程序最直观 | 中高 |
@@ -458,6 +459,7 @@ fanc-milling-app/
 │  ├─ 使用说明.md         918 行，文档唯一手改处
 │  ├─ img/               11 张截图（panel-*.png）
 │  ├─ samples/           图纸示例（part-60x40.svg）
+│  ├─ proposals/         界面方案对比（ui-schemes.html，三套配色/布局）
 │  └─ history/           历史工作日志
 ├─ tests/run-tests.js    277 项断言，Node 直接跑，无需浏览器
 ├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）

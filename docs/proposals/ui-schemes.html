@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANUC 铣削编程助手 · 配色与布局方案对比</title>
+<style>
+  /* =========================================================
+     这一页本身（提案页）的样式，用中性灰，避免影响对方案的判断
+     ========================================================= */
+  :root{
+    --ink:#111826; --ink-2:#3b4657; --ink-3:#6b7787; --ink-4:#98a2b0;
+    --paper:#ffffff; --paper-2:#f6f7f9; --rule:#e5e8ee;
+    --mono:"Cascadia Mono",Consolas,"Courier New",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--paper-2);color:var(--ink);font-size:14px;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  code,.mono{font-family:var(--mono)}
+
+  .top{background:#131a26;color:#fff;padding:18px 26px;display:flex;align-items:center;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;position:sticky;top:0;z-index:60}
+  .top h1{font-size:16px;font-weight:600;letter-spacing:.01em}
+  .top p{font-size:12px;color:#9aa7b8;margin-top:3px;max-width:74ch}
+  .seg{display:flex;gap:4px;background:#0c121b;padding:4px;border-radius:999px;border:1px solid #26303f}
+  .seg button{border:0;background:transparent;color:#a9b6c6;font-family:inherit;font-size:12.5px;
+    padding:7px 15px;border-radius:999px;cursor:pointer;transition:.15s}
+  .seg button:hover{color:#fff}
+  .seg button.on{background:#fff;color:#111826;font-weight:600}
+
+  main{max-width:1240px;margin:0 auto;padding:26px 22px 70px}
+  .intro{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:16px 18px;margin-bottom:20px;
+    font-size:13px;color:var(--ink-2);display:flex;gap:22px;flex-wrap:wrap}
+  .intro b{color:var(--ink)}
+  .intro span{flex:1 1 240px}
+  .intro i{font-style:normal;color:var(--ink-3)}
+
+  .view{display:none}
+  .view.on{display:block}
+  .stage{background:var(--paper);border:1px solid var(--rule);border-radius:14px;padding:14px;
+    overflow-x:auto;margin-bottom:20px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+
+  /* ============ 提案说明卡 ============ */
+  .notes{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px}
+  .ncard{min-width:0}
+  @media(max-width:980px){.notes{grid-template-columns:minmax(0,1fr)}}
+  .ncard{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:18px 20px}
+  .ncard h3{font-size:13.5px;font-weight:650;letter-spacing:.01em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .ncard h3 em{font-style:normal;font-size:11px;font-weight:500;color:var(--ink-4);letter-spacing:.06em}
+  .ncard p{font-size:12.5px;color:var(--ink-2);line-height:1.75}
+  .ncard p + p{margin-top:8px}
+
+  table.pal{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.pal th{text-align:left;font-weight:600;color:var(--ink-3);font-size:11.5px;letter-spacing:.04em;
+    padding:0 0 6px;border-bottom:1px solid var(--rule)}
+  table.pal td{padding:7px 0;border-bottom:1px solid #f0f2f6;vertical-align:middle}
+  table.pal tr:last-child td{border-bottom:0}
+  .sw{display:inline-block;width:26px;height:26px;border-radius:6px;border:1px solid rgba(16,24,40,.12);
+    vertical-align:-8px;margin-right:9px}
+  .sw-row{display:flex;align-items:center;gap:0}
+  .hex{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+  .use{color:var(--ink-2)}
+
+  /* 布局示意图 */
+  .diagram{border:1px dashed #d5dae2;border-radius:10px;padding:10px;background:#fbfcfd}
+  .dr{background:#eef1f6;border:1px solid #dde3ec;border-radius:5px;font-size:11px;color:var(--ink-3);
+    text-align:center;padding:5px 6px;margin-bottom:6px}
+  .dcols{display:grid;gap:6px;margin-bottom:6px}
+  .dbox{background:#e8eef8;border:1px solid #cfdcf0;border-radius:5px;font-size:11px;color:#33506f;
+    text-align:center;padding:16px 6px;line-height:1.5}
+  .dbox small{display:block;color:#6f86a3;font-size:10.5px;margin-top:2px}
+  .dg{font-size:11px;color:var(--ink-4);text-align:center;padding-top:2px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px;margin-top:2px}
+  .kv dt{color:var(--ink-3)}
+  .kv dd{color:var(--ink-2)}
+  .taglist{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tag{font-size:11px;padding:3px 9px;border-radius:999px;background:#f1f3f7;color:var(--ink-2);border:1px solid #e4e8ef}
+  .tag.good{background:#eef8f2;border-color:#cfe9da;color:#1c6b45}
+  .tag.bad{background:#fdf1ef;border-color:#f3d6d0;color:#9b3b2c}
+
+  /* ============ 对比模式 ============ */
+  .cmp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:1100px){.cmp-grid{grid-template-columns:1fr}}
+  .cmp-item{background:#fff;border:1px solid var(--rule);border-radius:12px;overflow:hidden;cursor:pointer;
+    transition:.18s;display:flex;flex-direction:column}
+  .cmp-item:hover{border-color:#b9c6d8;box-shadow:0 10px 26px rgba(16,24,40,.10);transform:translateY(-2px)}
+  .cmp-shot{height:300px;overflow:hidden;border-bottom:1px solid var(--rule);position:relative}
+  .cmp-shot .mock{zoom:.33}
+  /* 裁切到底部时露出的空白，用该方案自己的页面底色补上，看起来就是一张完整截图 */
+  .cmp-shot[data-s="a"]{background:#f1f4f9}
+  .cmp-shot[data-s="b"]{background:#f3f4f1}
+  .cmp-shot[data-s="c"]{background:#fafafb}
+  .cmp-item figcaption{padding:11px 14px 4px;font-size:13px;font-weight:600}
+  .cmp-item figcaption span{display:block;font-size:11.5px;color:var(--ink-3);font-weight:400;margin-top:2px}
+  .cmp-strip{display:flex;height:8px;margin:9px 14px 12px;border-radius:4px;overflow:hidden}
+  .cmp-strip i{flex:1}
+  @media(max-width:1100px){.cmp-shot{height:340px}.cmp-shot .mock{zoom:.5}}
+
+  table.cmp{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border:1px solid var(--rule);
+    border-radius:12px;overflow:hidden;margin-top:18px}
+  table.cmp th,table.cmp td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+  table.cmp thead th{background:#f7f9fc;font-size:11.5px;color:var(--ink-3);font-weight:600;letter-spacing:.03em}
+  table.cmp tbody tr:last-child td{border-bottom:0}
+  table.cmp td:first-child{color:var(--ink-3);white-space:nowrap}
+
+  /* =========================================================
+     应用界面模拟（三套方案共用同一份 DOM，只换令牌与栅格）
+     ========================================================= */
+  .mock{--f:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    font-family:var(--f);background:var(--bg);color:var(--txt);min-width:1060px;
+    padding:0 0 18px;line-height:1.5;font-size:13px}
+  .mock *{box-sizing:border-box}
+  .mock .mono{font-family:var(--mono2,"Cascadia Mono",Consolas,monospace)}
+
+  /* 页头 */
+  .mk-head{display:flex;align-items:center;justify-content:space-between;height:var(--head-h);
+    padding:0 var(--pad);background:var(--head-bg);border-bottom:1px solid var(--line);gap:14px}
+  .mk-brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .mk-logo{width:var(--logo);height:var(--logo);border-radius:var(--logo-r);background:var(--p);
+    color:#fff;display:grid;place-items:center;font-size:calc(var(--logo) * .5);font-weight:700;flex:none;
+    letter-spacing:-.04em}
+  .mk-tt{min-width:0}
+  .mk-tt b{display:block;font-size:var(--t-title);font-weight:650;letter-spacing:-.01em;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .mk-tt span{display:block;font-size:var(--t-sub);color:var(--sub);margin-top:1px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .mk-meta{display:flex;align-items:center;gap:6px;flex:none}
+  .mk-pill{font-size:var(--t-sub);padding:3px 9px;border-radius:var(--pill);border:1px solid var(--line);
+    background:var(--chip);color:var(--sub);white-space:nowrap}
+  .mk-pill.pri{background:var(--p-soft);border-color:var(--p-line);color:var(--p-dark);font-weight:600}
+
+  /* 主体栅格：方案之间只改这里 */
+  .mk-body{display:grid;gap:var(--gap);padding:var(--gap) var(--pad) 0;
+    grid-template-rows:auto 1fr}
+
+  /* 标签条 / 左轨 */
+  .mk-tabs{display:flex;gap:6px;align-items:center;grid-area:tabs;min-width:0}
+  .mk-tabs .tab{border:1px solid var(--line);background:var(--card);color:var(--txt2);font-family:inherit;
+    font-size:var(--t-tab);padding:var(--tab-pad);border-radius:var(--tab-r);cursor:pointer;
+    white-space:nowrap;flex:none;display:flex;align-items:center;justify-content:center;gap:5px}
+  .mk-tabs .tab i{display:none;font-style:normal}
+  .mk-tabs .tab.on{background:var(--p);border-color:var(--p);color:#fff;font-weight:600}
+  .mk-tabs .more{margin-left:auto;color:var(--sub);font-size:var(--t-sub)}
+
+  /* 卡片 */
+  .mk-card{background:var(--card);border:1px solid var(--line);border-radius:var(--card-r);
+    padding:var(--pad);box-shadow:var(--card-sh);display:flex;flex-direction:column;min-width:0;min-height:0}
+  .mk-editor{grid-area:editor}
+  .mk-canvas{grid-area:canvas}
+  .mk-rail{grid-area:rail}
+  .mk-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .mk-ch b{font-size:var(--t-card);font-weight:650;letter-spacing:-.005em;display:flex;align-items:center;gap:6px;
+    white-space:nowrap;flex:none}
+  .mk-actions{flex-wrap:wrap;justify-content:flex-end}
+  .mk-ch b::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--p)}
+  .mk-actions{display:flex;align-items:center;gap:6px}
+  .mk-btn{font-family:inherit;font-size:var(--t-sub);padding:5px 10px;border-radius:var(--btn-r);cursor:default;
+    border:1px solid var(--line2);background:var(--card);color:var(--txt2);white-space:nowrap}
+  .mk-btn.pri{background:var(--p);border-color:var(--p);color:#fff;font-weight:600}
+  .mk-btn.gho{background:var(--chip)}
+  .mk-sel{font-family:inherit;font-size:var(--t-sub);padding:5px 8px;border-radius:var(--btn-r);
+    border:1px solid var(--line2);background:var(--card);color:var(--txt2);display:flex;align-items:center;gap:16px}
+
+  /* 模板 chips */
+  .mk-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+  .mk-chips span{font-size:var(--t-sub);padding:4px 9px;border-radius:var(--chip-r);border:1px solid var(--line);
+    color:var(--txt2);background:var(--chip)}
+  .mk-chips span.on{background:var(--p-soft);border-color:var(--p-line);color:var(--p-dark);font-weight:600}
+
+  /* 代码块 */
+  .mk-code{flex:1;background:var(--code);border-radius:var(--btn-r);padding:9px 0;overflow:hidden;
+    font-family:var(--mono2,"Cascadia Mono",Consolas,monospace);font-size:var(--t-code);line-height:1.78;
+    box-shadow:inset 0 0 0 1px rgba(148,163,184,.10)}
+  .mk-line{display:flex;gap:10px;padding:0 10px;white-space:pre}
+  .mk-line .n{color:var(--code-dim);width:18px;text-align:right;flex:none;user-select:none}
+  .mk-line .c{color:var(--code-tx)}
+  .mk-line .g{color:var(--syn-g);font-weight:600}
+  .mk-line .v{color:var(--syn-v)}
+  .mk-line .m{color:var(--syn-m)}
+  .mk-line .cm{color:var(--code-dim)}
+  .mk-line.cur{background:rgba(255,255,255,.06);box-shadow:inset 3px 0 0 var(--cur)}
+  .mk-foot{font-size:var(--t-sub);color:var(--sub);margin-top:8px;display:flex;align-items:center;gap:6px}
+  .mk-foot kbd{font-family:var(--mono2,monospace);font-size:10.5px;border:1px solid var(--line2);
+    border-bottom-width:2px;border-radius:3px;padding:0 4px;color:var(--sub);background:var(--chip)}
+
+  /* 画布卡 */
+  .mk-meta{display:flex;flex-wrap:wrap;gap:12px;font-size:var(--t-sub);color:var(--sub);margin-bottom:9px}
+  .mk-meta b{color:var(--txt);font-weight:600}
+  .mk-ctrls{display:flex;align-items:center;gap:12px;font-size:var(--t-sub);color:var(--txt2);
+    padding:7px 10px;border:1px solid var(--line);border-radius:var(--btn-r);background:var(--chip);margin-bottom:9px}
+  .mk-ctrls .fld{display:flex;align-items:center;gap:6px}
+  .mk-ctrls .inp{width:44px;border:1px solid var(--line2);background:var(--card);border-radius:4px;
+    padding:1px 6px;text-align:right;color:var(--txt);font-size:var(--t-sub)}
+  .mk-chk{display:flex;align-items:center;gap:5px;margin-left:auto}
+  .mk-box{width:11px;height:11px;border-radius:3px;background:var(--p);color:#fff;font-size:8px;
+    display:grid;place-items:center;line-height:1}
+  .mk-plot{flex:1;border:1px solid var(--line);border-radius:var(--btn-r);background:var(--plot-bg);
+    overflow:hidden;min-height:205px;display:flex}
+  .mk-plot svg{width:100%;height:100%;display:block}
+  .mk-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:var(--t-sub);color:var(--sub);margin-top:8px}
+  .mk-legend i{display:inline-block;width:16px;border-top:2px solid;vertical-align:2px;margin-right:4px}
+  .mk-legend i.dash{border-top-style:dashed}
+  .mk-legend i.dot{border-top-style:dotted}
+  .mk-legend i.cir{width:9px;height:9px;border:1.5px solid;border-radius:50%;border-top-width:1.5px;
+    vertical-align:-1px}
+
+  /* 速查列表 */
+  .mk-search{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:var(--btn-r);
+    padding:5px 9px;color:var(--ink-placeholder,var(--sub));font-size:var(--t-sub);background:var(--card);margin-bottom:8px}
+  .mk-search span{color:var(--sub)}
+  .mk-filters{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+  .mk-filters span{font-size:var(--t-sub);padding:3px 8px;border-radius:var(--pill);border:1px solid var(--line);
+    color:var(--txt2);background:var(--chip)}
+  .mk-filters span.on{background:var(--p);border-color:var(--p);color:#fff;font-weight:600}
+  .mk-list{flex:1;overflow:hidden;border-top:1px solid var(--line)}
+  .mk-item{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);
+    font-size:var(--t-sub)}
+  .mk-item .code{font-family:var(--mono2,monospace);font-size:var(--t-sub);color:var(--p-dark);
+    font-weight:600;width:34px;flex:none}
+  .mk-item .nm{flex:1;color:var(--txt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mk-item .lb{color:var(--sub);font-size:10.5px;padding:1px 6px;border-radius:var(--pill);
+    background:var(--chip);border:1px solid var(--line);white-space:nowrap}
+  .mk-item.sel{background:var(--p-soft);border-radius:4px;padding-left:4px;padding-right:4px}
+  .mk-railfoot{font-size:10.5px;color:var(--sub);margin-top:8px;line-height:1.6}
+
+  /* ---------- 方案 A：钢蓝三列工作台 ---------- */
+  .mock[data-s="a"]{
+    --p:#2b6cb0; --p-dark:#22548a; --p-soft:#e9f1fa; --p-line:#c9dcf0;
+    --bg:#f1f4f9; --card:#ffffff; --line:#e3e8ef; --line2:#d2dae5; --chip:#f7f9fc;
+    --txt:#151c26; --txt2:#3c4756; --sub:#5f6c7b;
+    --code:#0e141b; --code-tx:#cfdae8; --code-dim:#5b6b7f;
+    --syn-g:#7fb6f0; --syn-v:#e7c07b; --syn-m:#8ed3c4; --cur:#f0b429;
+    --path:#2b6cb0; --path-dark:#22548a; --path2:#b8834a; --plot-bg:#fdfefe;
+    --head-h:56px; --head-bg:#fff; --logo:30px; --logo-r:7px;
+    --t-title:15px; --t-sub:11.5px; --t-card:14px; --t-tab:12.5px; --t-code:12px;
+    --card-r:6px; --btn-r:5px; --chip-r:4px; --tab-r:999px; --pill:999px;
+    --gap:10px; --pad:14px; --tab-pad:6px 12px;
+    --card-sh:0 1px 2px rgba(16,24,40,.04);
+  }
+  .mock[data-s="a"] .mk-body{
+    grid-template-columns:minmax(0,1fr) minmax(0,1.32fr) 236px;
+    grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"tabs tabs tabs" "editor canvas rail";
+  }
+  /* ---------- 方案 B：松石双列 + 左轨 ---------- */
+  .mock[data-s="b"]{
+    --p:#0f766e; --p-dark:#115e59; --p-soft:#e6f4f1; --p-line:#bfe3dc;
+    --bg:#f3f4f1; --card:#ffffff; --line:#e4e6e1; --line2:#d3d7d0; --chip:#f7f8f5;
+    --txt:#16211f; --txt2:#394744; --sub:#61706c;
+    --code:#10201d; --code-tx:#d2e3de; --code-dim:#5f7a73;
+    --syn-g:#7fd6c4; --syn-v:#e6c07a; --syn-m:#a8cf8f; --cur:#e0a526;
+    --path:#0f766e; --path-dark:#115e59; --path2:#a86f3a; --plot-bg:#fcfdfb;
+    --head-h:52px; --head-bg:#fff; --logo:28px; --logo-r:6px;
+    --t-title:14.5px; --t-sub:11.5px; --t-card:14px; --t-tab:12px; --t-code:12px;
+    --card-r:8px; --btn-r:6px; --chip-r:5px; --tab-r:6px; --pill:6px;
+    --gap:14px; --pad:18px; --tab-pad:8px 0;
+    --card-sh:0 1px 3px rgba(16,24,40,.05);
+  }
+  .mock[data-s="b"] .mk-body{
+    grid-template-columns:64px minmax(0,1fr) minmax(0,1.16fr);
+    grid-template-rows:minmax(0,1.15fr) minmax(0,.85fr);
+    grid-template-areas:"tabs editor canvas" "tabs editor rail";
+  }
+  .mock[data-s="a"] .mk-editor .mk-actions .mk-btn.gho{display:none}
+  .mock[data-s="b"] .mk-tabs{flex-direction:column;background:var(--rail-bg,#13211f);border-radius:8px;
+    padding:8px 6px;gap:4px;align-self:stretch}
+  .mock[data-s="b"] .mk-tabs .tab{width:100%;padding:9px 0;font-size:11.5px;border:0;background:transparent;
+    color:#9fb3ad;border-radius:5px;flex-direction:column;gap:2px}
+  .mock[data-s="b"] .mk-tabs .tab span{display:none}
+  .mock[data-s="b"] .mk-tabs .tab i{display:block;font-size:11.5px;letter-spacing:.06em}
+  .mock[data-s="b"] .mk-tabs .tab.on{background:rgba(255,255,255,.10);color:#fff;
+    box-shadow:inset 3px 0 0 var(--p-light,#4ecdc4)}
+  .mock[data-s="b"] .mk-tabs .more{display:none}
+  .mock[data-s="b"] .mk-rail{padding:12px 14px}
+  .mock[data-s="b"] .mk-rail .mk-item:nth-child(n+5){display:none}
+
+  /* ---------- 方案 C：靛紫单列聚焦 ---------- */
+  .mock[data-s="c"]{
+    --p:#4f46e5; --p-dark:#4338ca; --p-soft:#eef0fe; --p-line:#d6d9fb;
+    --bg:#fafafb; --card:#ffffff; --line:#ececf1; --line2:#dedee7; --chip:#f7f7fa;
+    --txt:#15151f; --txt2:#3d3d4c; --sub:#6b6b7b;
+    --code:#101322; --code-tx:#d6d9e8; --code-dim:#5f6580;
+    --syn-g:#a5b4fc; --syn-v:#f0c273; --syn-m:#8fd6c0; --cur:#db2777;
+    --path:#4f46e5; --path-dark:#4338ca; --path2:#b07a4a; --plot-bg:#fdfdfe;
+    --head-h:64px; --head-bg:#fff; --logo:32px; --logo-r:9px;
+    --t-title:16px; --t-sub:12px; --t-card:14.5px; --t-tab:12.5px; --t-code:12.5px;
+    --card-r:14px; --btn-r:9px; --chip-r:8px; --tab-r:999px; --pill:999px;
+    --gap:22px; --pad:24px; --tab-pad:7px 14px;
+    --card-sh:0 6px 22px rgba(16,24,40,.06);
+  }
+  .mock[data-s="c"] .mk-body{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto auto;
+    grid-template-areas:"tabs" "editor" "canvas" "rail";
+  }
+  .mock[data-s="c"]{min-width:0}
+  .mock[data-s="c"] .mk-tabs{justify-content:center;background:var(--chip);border:1px solid var(--line);
+    border-radius:999px;padding:5px;gap:3px;width:fit-content;margin:0 auto}
+  .mock[data-s="c"] .mk-tabs .tab{border:0;background:transparent;border-radius:999px;padding:7px 13px;color:var(--txt2)}
+  .mock[data-s="c"] .mk-tabs .tab.on{background:var(--p);color:#fff;font-weight:600}
+  .mock[data-s="c"] .mk-tabs .more{display:none}
+  .mock[data-s="c"] .mk-tabs .tab:nth-child(n+7){display:none}
+  .mock[data-s="c"] .mk-code{min-height:0}
+  .mock[data-s="c"] .mk-line:nth-child(n+13){display:none}
+  .mock[data-s="c"] .mk-rail{flex-direction:row;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .mock[data-s="c"] .mk-rail .mk-ch,.mock[data-s="c"] .mk-rail .mk-search{width:100%}
+  .mock[data-s="c"] .mk-rail .mk-list{display:flex;gap:0;border-top:0;flex:1 1 100%}
+  .mock[data-s="c"] .mk-rail .mk-item{flex:1 1 0;border-bottom:0;border-right:1px solid var(--line);
+    flex-direction:column;align-items:flex-start;gap:2px;padding:6px 10px}
+  .mock[data-s="c"] .mk-rail .mk-item:last-child{border-right:0}
+  .mock[data-s="c"] .mk-rail .mk-item .code{width:auto}
+  .mock[data-s="c"] .mk-rail .mk-item{min-width:0;overflow:hidden}
+  .mock[data-s="c"] .mk-rail .mk-item .nm{max-width:100%}
+  .mock[data-s="c"] .mk-rail .mk-item:nth-child(n+5){display:none}
+  .mock[data-s="c"] .mk-railfoot{width:100%}
+
+  /* 方案 B 的速查卡在右下，压扁一点 */
+  .mock[data-s="b"] .mk-rail .mk-filters,.mock[data-s="b"] .mk-rail .mk-ch{margin-bottom:6px}
+
+  /* 窄屏：示意图三列等分，配色表缩一号，避免撑破卡片 */
+  @media (max-width:560px){
+    .diagram .dcols{grid-template-columns:repeat(3,minmax(0,1fr)) !important;gap:4px !important}
+    .diagram .dbox{padding:10px 3px;font-size:10px}
+    .diagram .dbox small{font-size:9.5px}
+    table.pal{font-size:11.5px}
+    .sw{width:20px;height:20px;vertical-align:-5px;margin-right:6px}
+    .ncard{padding:14px}
+    .top h1{font-size:14.5px}
+  }
+  .stage-tip{display:none;font-size:11.5px;color:var(--ink-3);margin:0 0 8px}
+  @media(max-width:980px){.stage-tip{display:block}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>配色与布局方案对比 · FANUC 铣削编程助手</h1>
+    <p>三套方案渲染的是<b>同一份界面内容</b>（同一 DOM、同一份程序与指数量数据），只替换配色令牌与栅格模板——所以看到的就是"换过之后长什么样"。</p>
+  </div>
+  <div class="seg" id="seg">
+    <button data-view="a" class="on">方案 A</button>
+    <button data-view="b">方案 B</button>
+    <button data-view="c">方案 C</button>
+    <button data-view="all">并排对比</button>
+  </div>
+</div>
+
+<main>
+  <div class="intro">
+    <span><b>怎么看：</b>先点上面三个方案逐个看细节，再切「并排对比」横向比色块与密度。每套下方都有配色表、布局尺寸与代价说明。</span>
+    <span><i>尺寸都是实际值：卡片圆角、内边距、控件高度、列宽都写在方案里，选定后我按这些数字改 <code>app.html</code>。</i></span>
+  </div>
+
+  <section class="view on" id="view-a">
+    <div class="stage"><div class="slot" data-s="a"></div></div>
+    <div class="notes">
+      <div class="ncard">
+        <h3>配色方案 <em>COLOR</em></h3>
+        <table class="pal">
+          <thead><tr><th style="width:46%">角色</th><th style="width:27%">色值</th><th>用在哪</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#2b6cb0"></span>主色 · 钢蓝</span></td><td class="hex">#2B6CB0</td><td class="use">主按钮、当前标签、卡标题竖条、轨迹主线</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#22548a"></span>主色 · 深</span></td><td class="hex">#22548A</td><td class="use">按钮 hover、强调文字、代码里的指令色</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#e9f1fa"></span>主色 · 浅底</span></td><td class="hex">#E9F1FA</td><td class="use">选中行、标签浅底、<code>代码</code>内联高亮</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#0e9384"></span>辅助 · 青绿</span></td><td class="hex">#0E9384</td><td class="use">通过/合格、孔位点、成功提示</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#b45309"></span>辅助 · 琥珀</span></td><td class="hex">#B45309</td><td class="use">警告、当前执行段（画布高亮）</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#f1f4f9"></span>背景</span></td><td class="hex">#F1F4F9</td><td class="use">页面底 · 卡片为纯白 #FFF</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#0e141b"></span>代码块</span></td><td class="hex">#0E141B</td><td class="use">编辑器 / 解释结果，字色 #CFDAE8</td></tr>
+          </tbody>
+        </table>
+        <div class="taglist">
+          <span class="tag">密度最高</span><span class="tag">最接近参考图</span><span class="tag good">改造成本最低</span>
+        </div>
+      </div>
+
+      <div class="ncard">
+        <h3>模块布局 <em>LAYOUT</em></h3>
+        <div class="diagram">
+          <div class="dr">页头 56px ｜ 左：30px 圆角 logo + 标题 15px / 副标 11.5px　右：版本 + 两个计数胶囊</div>
+          <div class="dr">标签条 40px ｜ 11 个胶囊横排，间距 6，单行可横滑</div>
+          <div class="dcols" style="grid-template-columns:1fr 1.32fr 236px">
+            <div class="dbox">编辑器<small>1fr（≥380px）</small></div>
+            <div class="dbox">程序解读 / 画布<small>1.32fr</small></div>
+            <div class="dbox">G/M 速查<small>236px</small></div>
+          </div>
+          <div class="dg">卡片间距 10 · 内边距 14 · 圆角 6 · 控件高 30 · 正文字号 13</div>
+        </div>
+        <dl class="kv" style="margin-top:12px">
+          <dt>排列</dt><dd>三列同屏，左边写、中间看轨迹、右边查指令，互不遮挡</dd>
+          <dt>间距</dt><dd>统一 4 的倍数：卡片间 10、卡片内 14、控件间 6~8</dd>
+          <dt>层级</dt><dd>只有两级：页面底色 + 白卡片；阴影极轻（0 1px 2px）</dd>
+        </dl>
+        <p style="margin-top:10px"><b>代价：</b>1366×768 的教室一体机上三列偏挤，速查列只能显示 5~6 条；平板（≤900px）必须降为两列或堆叠。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-b">
+    <div class="stage"><div class="slot" data-s="b"></div></div>
+    <div class="notes">
+      <div class="ncard">
+        <h3>配色方案 <em>COLOR</em></h3>
+        <table class="pal">
+          <thead><tr><th style="width:46%">角色</th><th style="width:27%">色值</th><th>用在哪</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#0f766e"></span>主色 · 松石绿</span></td><td class="hex">#0F766E</td><td class="use">主按钮、当前标签左色条、轨迹主线</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#115e59"></span>主色 · 深</span></td><td class="hex">#115E59</td><td class="use">按钮 hover、代码里的指令色</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#e6f4f1"></span>主色 · 浅底</span></td><td class="hex">#E6F4F1</td><td class="use">选中行、浅底标签</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#b45309"></span>辅助 · 琥珀</span></td><td class="hex">#B45309</td><td class="use">警告、当前执行段</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#1d4ed8"></span>辅助 · 蓝</span></td><td class="hex">#1D4ED8</td><td class="use">链接、坐标数值（与主色区分语义）</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#f3f4f1"></span>背景 · 暖灰</span></td><td class="hex">#F3F4F1</td><td class="use">页面底（带一点黄调，长时间看不刺眼）</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#13211f"></span>左轨 · 深墨绿</span></td><td class="hex">#13211F</td><td class="use">左侧导航栏（与代码块呼应，形成"仪表"感）</td></tr>
+          </tbody>
+        </table>
+        <div class="taglist">
+          <span class="tag">IDE 感</span><span class="tag">11 面板全可见</span><span class="tag good">横向最省</span>
+        </div>
+      </div>
+
+      <div class="ncard">
+        <h3>模块布局 <em>LAYOUT</em></h3>
+        <div class="diagram">
+          <div class="dr">页头 52px ｜ logo 28px + 标题 + 右侧胶囊</div>
+          <div class="dcols" style="grid-template-columns:64px 1fr 1.16fr">
+            <div class="dbox" style="background:#d9e5e2;border-color:#b9cfca;color:#1c3a34;padding:22px 2px">左轨<small>64px<br>11 项竖排</small></div>
+            <div class="dbox">编辑器<small>1fr · 通高</small></div>
+            <div class="dbox">画布（上）<small>1.16fr · 1.15 行</small></div>
+          </div>
+          <div class="dcols" style="grid-template-columns:64px 1fr 1.16fr">
+            <div class="dbox" style="background:#f2f5f4;border-color:#dde3e1;color:#8b9a96;padding:8px 2px">—</div>
+            <div class="dbox" style="background:#f2f5f4;border-color:#dde3e1;color:#8b9a96;padding:8px 2px">（编辑器通高）</div>
+            <div class="dbox">速查（右下）<small>压缩为 4 条</small></div>
+          </div>
+          <div class="dg">卡片间距 14 · 内边距 18 · 圆角 8 · 控件高 34 · 正文字号 13.5</div>
+        </div>
+        <dl class="kv" style="margin-top:12px">
+          <dt>排列</dt><dd>导航从横向改成 64px 竖轨（2 字短标 + 悬停全名），主区两列：左写右看，速查收到右下角</dd>
+          <dt>间距</dt><dd>比 A 松一档：卡片间 14、卡片内 18，给深色左轨留呼吸</dd>
+          <dt>层级</dt><dd>三级：暖灰底 / 白卡 / 深色轨与深色代码块，暗部集中在左侧和编辑器</dd>
+        </dl>
+        <p style="margin-top:10px"><b>代价：</b>2 字竖排标签可读性弱，必须配悬停提示；速查被压到 4 条，查指令要滚动。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-c">
+    <div class="stage"><div class="slot" data-s="c"></div></div>
+    <div class="notes">
+      <div class="ncard">
+        <h3>配色方案 <em>COLOR</em></h3>
+        <table class="pal">
+          <thead><tr><th style="width:46%">角色</th><th style="width:27%">色值</th><th>用在哪</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#4f46e5"></span>主色 · 靛紫</span></td><td class="hex">#4F46E5</td><td class="use">主按钮、分段选中、轨迹主线</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#4338ca"></span>主色 · 深</span></td><td class="hex">#4338CA</td><td class="use">hover、代码里的指令色</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#eef0fe"></span>主色 · 浅底</span></td><td class="hex">#EEF0FE</td><td class="use">选中行、内联代码底</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#db2777"></span>辅助 · 品红</span></td><td class="hex">#DB2777</td><td class="use">当前执行段、关键强调（唯一的高饱和点缀）</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#b45309"></span>辅助 · 琥珀</span></td><td class="hex">#B45309</td><td class="use">警告、留量提示</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#fafafb"></span>背景</span></td><td class="hex">#FAFAFB</td><td class="use">页面底（近白，靠阴影分层而非描边）</td></tr>
+            <tr><td><span class="sw-row"><span class="sw" style="background:#101322"></span>代码块</span></td><td class="hex">#101322</td><td class="use">带一点紫调的黑，字色 #D6D9E8</td></tr>
+          </tbody>
+        </table>
+        <div class="taglist">
+          <span class="tag">留白最大</span><span class="tag">手机/投影友好</span><span class="tag bad">改造成本最高</span>
+        </div>
+      </div>
+
+      <div class="ncard">
+        <h3>模块布局 <em>LAYOUT</em></h3>
+        <div class="diagram">
+          <div class="dr">页头 64px ｜ 标题居中偏左，右侧仅保留版本</div>
+          <div class="dr">分段控件（居中）｜只显示前 6 个标签 + "更多"，收缩为一个胶囊组</div>
+          <div class="dbox" style="padding:20px 6px">编辑器（单列 · 内容区 360px）</div>
+          <div class="dbox" style="padding:20px 6px;margin-top:6px">程序解读 / 画布（下方同宽）</div>
+          <div class="dbox" style="padding:12px 6px;margin-top:6px;background:#f3f0fb;border-color:#ddd6f6;color:#5b4b8a">速查抽屉（底部横排 4 条 + 搜索一行）</div>
+          <div class="dg">卡片间距 22 · 内边距 24 · 圆角 14 · 控件高 38 · 正文字号 14</div>
+        </div>
+        <dl class="kv" style="margin-top:12px">
+          <dt>排列</dt><dd>一次只做一件事：单列 900px 居中，编辑器在上、画布在下，速查压到最底成抽屉</dd>
+          <dt>间距</dt><dd>整体放松一倍：卡片间 22、内边距 24，用留白替代描边分隔</dd>
+          <dt>层级</dt><dd>两级半：底色近白 + 白卡 + 柔和阴影（0 6px 22px），几乎不用灰边</dd>
+        </dl>
+        <p style="margin-top:10px"><b>代价：</b>程序与轨迹不能同屏对照，课堂上"讲一行看一段"要来回滚；11 个标签收进分段控件，找面板要多一步。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-all">
+    <div class="cmp-grid">
+      <figure class="cmp-item" data-goto="a">
+        <div class="cmp-shot" data-s="a"><div class="slot" data-s="a"></div></div>
+        <figcaption>方案 A · 钢蓝三列工作台<span>#2B6CB0 · 三列同屏 · 密度最高</span></figcaption>
+        <div class="cmp-strip"><i style="background:#2b6cb0"></i><i style="background:#e9f1fa"></i><i style="background:#0e9384"></i><i style="background:#b45309"></i><i style="background:#f1f4f9"></i><i style="background:#0e141b"></i></div>
+      </figure>
+      <figure class="cmp-item" data-goto="b">
+        <div class="cmp-shot" data-s="b"><div class="slot" data-s="b"></div></div>
+        <figcaption>方案 B · 松石双列 + 左轨<span>#0F766E · 导航竖排 · 横向最省</span></figcaption>
+        <div class="cmp-strip"><i style="background:#0f766e"></i><i style="background:#e6f4f1"></i><i style="background:#1d4ed8"></i><i style="background:#b45309"></i><i style="background:#f3f4f1"></i><i style="background:#13211f"></i></div>
+      </figure>
+      <figure class="cmp-item" data-goto="c">
+        <div class="cmp-shot" data-s="c"><div class="slot" data-s="c"></div></div>
+        <figcaption>方案 C · 靛紫单列聚焦<span>#4F46E5 · 单列留白 · 手机最好读</span></figcaption>
+        <div class="cmp-strip"><i style="background:#4f46e5"></i><i style="background:#eef0fe"></i><i style="background:#db2777"></i><i style="background:#b45309"></i><i style="background:#fafafb"></i><i style="background:#101322"></i></div>
+      </figure>
+    </div>
+
+    <table class="cmp">
+      <thead><tr><th style="width:110px">对比项</th><th>方案 A · 钢蓝三列</th><th>方案 B · 松石双列</th><th>方案 C · 靛紫单列</th></tr></thead>
+      <tbody>
+        <tr><td>一句话</td><td>像一台工业 HMI：写、看、查同时摆在眼前</td><td>像一个轻量 IDE：面板用竖轨排开，专注写与看</td><td>像一份讲义：一屏一件事，留白多、字大</td></tr>
+        <tr><td>主色</td><td>#2B6CB0 钢蓝（冷静、专业）</td><td>#0F766E 松石绿（稳、少见于教学软件）</td><td>#4F46E5 靛紫（年轻、有设计感）</td></tr>
+        <tr><td>背景</td><td>#F1F4F9 冷灰 + 纯白卡</td><td>#F3F4F1 暖灰 + 白卡 + 深色左轨</td><td>#FAFAFB 近白，靠阴影分层</td></tr>
+        <tr><td>列结构</td><td>3 列（1 : 1.32 : 236px）</td><td>左轨 64 + 2 列（1 : 1.16）</td><td>1 列 900px 居中</td></tr>
+        <tr><td>圆角 / 间距</td><td>6 / 10 / 内边距 14</td><td>8 / 14 / 内边距 18</td><td>14 / 22 / 内边距 24</td></tr>
+        <tr><td>同屏信息量</td><td>高（程序 + 轨迹 + 指令）</td><td>中高（程序 + 轨迹，指令压缩）</td><td>低（一次一块）</td></tr>
+        <tr><td>1366 笔记本</td><td>偏挤，速查列要收窄</td><td>刚好</td><td>舒服，两侧留白多</td></tr>
+        <tr><td>手机 / 平板</td><td>需降两列，改动小</td><td>左轨可折叠，改动中</td><td>几乎原生适配</td></tr>
+        <tr><td>改造成本</td><td>只换 :root 令牌 + 3 处栅格</td><td>令牌 + 导航结构（横→竖）</td><td>令牌 + 导航变分段 + 主区重排</td></tr>
+        <tr><td>适合</td><td>课堂演示"写一行看一段"，教师批改</td><td>教师长时间备课、学生机房自查</td><td>学生手机自查、投影展示</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--ink-3);margin-top:10px">点任意一张缩略图可进入该方案的完整视图。</p>
+  </section>
+</main>
+
+<!-- ===================== 界面模拟模板（三套共用） ===================== -->
+<template id="mock-tpl">
+  <div class="mock">
+    <div class="mk-head">
+      <div class="mk-brand">
+        <div class="mk-logo">铣</div>
+        <div class="mk-tt">
+          <b>FANUC 铣削编程助手</b>
+          <span>写程序 · 算参数 · 查指令 · 讲解程序 · 校验刀轨</span>
+        </div>
+      </div>
+      <div class="mk-meta">
+        <span class="mk-pill pri">v1.11.0</span>
+        <span class="mk-pill">G 代码 48</span>
+        <span class="mk-pill">M 代码 12</span>
+      </div>
+    </div>
+
+    <div class="mk-body">
+      <div class="mk-tabs">
+        <button class="tab"><i>速查</i><span>G/M 代码速查</span></button>
+        <button class="tab on"><i>编辑</i><span>程序编辑器</span></button>
+        <button class="tab"><i>计算</i><span>参数计算</span></button>
+        <button class="tab"><i>解释</i><span>程序解释</span></button>
+        <button class="tab"><i>校验</i><span>程序校验</span></button>
+        <button class="tab"><i>刀轨</i><span>刀轨演示</span></button>
+        <button class="tab"><i>批改</i><span>批量批改</span></button>
+        <button class="tab"><i>找错</i><span>找错练习</span></button>
+        <button class="tab"><i>刀具</i><span>刀具库</span></button>
+        <button class="tab"><i>AI</i><span>AI 智能编程</span></button>
+        <button class="tab"><i>帮助</i><span>帮助</span></button>
+        <span class="more">共 11 个面板 →</span>
+      </div>
+
+      <!-- 编辑器 -->
+      <section class="mk-card mk-editor">
+        <div class="mk-ch">
+          <b>程序编辑器</b>
+          <div class="mk-actions">
+            <div class="mk-sel">载入示例程序… <span style="color:var(--sub)">▾</span></div>
+            <button class="mk-btn gho">复制</button>
+            <button class="mk-btn gho">保存</button>
+            <button class="mk-btn pri">新建程序</button>
+          </div>
+        </div>
+        <div class="mk-chips">
+          <span class="on">程序头</span><span>直边</span><span>圆弧凸</span><span>圆弧凹</span>
+          <span>刀具建立</span><span>长度补偿</span><span>钻孔循环</span><span>攻丝循环</span>
+          <span>子程序调用</span><span>程序结束</span>
+        </div>
+        <div class="mk-code">
+          <div class="mk-line"><span class="n">1</span><span class="c"><span class="cm">O0001；平面铣削示例（分层铣削）</span></span></div>
+          <div class="mk-line"><span class="n">2</span><span class="c"><span class="g">G90</span> <span class="g">G54</span> <span class="g">G21</span>；绝对坐标 <span class="cm">每分钟进给 · 公制</span></span></div>
+          <div class="mk-line"><span class="n">3</span><span class="c"><span class="g">G54</span>；工件坐标系</span></div>
+          <div class="mk-line"><span class="n">4</span><span class="c"><span class="m">T01</span> <span class="m">M06</span>；<span class="cm">1 号刀（面铣刀）</span></span></div>
+          <div class="mk-line"><span class="n">5</span><span class="c"><span class="g">G00</span> <span class="g">X-40</span> <span class="g">Y-40</span>；快速定位到起点</span></div>
+          <div class="mk-line"><span class="n">6</span><span class="c"><span class="g">G43</span> <span class="g">H01</span> <span class="g">Z50</span> <span class="m">M03</span> <span class="v">S800</span>；长度补偿 + 主轴正转</span></div>
+          <div class="mk-line"><span class="n">7</span><span class="c"><span class="g">G00</span> <span class="g">Z5</span> <span class="m">M08</span>；下刀到安全高度 · 开冷却</span></div>
+          <div class="mk-line"><span class="n">8</span><span class="c"><span class="g">G01</span> <span class="g">Z-1</span> <span class="v">F80</span>；切削第一层</span></div>
+          <div class="mk-line"><span class="n">9</span><span class="c"><span class="g">X60</span> <span class="v">F150</span>；切削第一行</span></div>
+          <div class="mk-line"><span class="n">10</span><span class="c"><span class="g">Y-20</span></span></div>
+          <div class="mk-line"><span class="n">11</span><span class="c"><span class="g">X-60</span></span></div>
+          <div class="mk-line cur"><span class="n">12</span><span class="c"><span class="g">Y0</span></span></div>
+          <div class="mk-line"><span class="n">13</span><span class="c"><span class="g">X60</span></span></div>
+          <div class="mk-line"><span class="n">14</span><span class="c"><span class="g">Y20</span></span></div>
+          <div class="mk-line"><span class="n">15</span><span class="c"><span class="g">X-60</span></span></div>
+          <div class="mk-line"><span class="n">16</span><span class="c"><span class="g">Y40</span></span></div>
+          <div class="mk-line"><span class="n">17</span><span class="c"><span class="g">X60</span></span></div>
+          <div class="mk-line"><span class="n">18</span><span class="c"><span class="g">G00</span> <span class="g">Z50</span> <span class="m">M09</span>；抬刀 · 关冷却</span></div>
+          <div class="mk-line"><span class="n">19</span><span class="c"><span class="m">M05</span>；主轴停</span></div>
+          <div class="mk-line"><span class="n">20</span><span class="c"><span class="m">M30</span>；程序结束</span></div>
+        </div>
+        <div class="mk-foot">模板按钮在光标处插入代码；<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 运行校验</div>
+      </section>
+
+      <!-- 程序解读 / 画布 -->
+      <section class="mk-card mk-canvas">
+        <div class="mk-ch">
+          <b>程序解读 · 刀轨预览</b>
+          <div class="mk-actions">
+            <button class="mk-btn gho">运行解算</button>
+            <button class="mk-btn pri">预览轨迹</button>
+          </div>
+        </div>
+        <div class="mk-meta">
+          <span>线段 <b>10</b></span><span>孔位 <b>0</b></span>
+          <span>起点 <b>(-40, -40, 0)</b></span><span>范围 <b>X -60~60 / Y -40~40</b></span>
+        </div>
+        <div class="mk-ctrls">
+          <span class="fld">刀具半径 <span class="inp">5</span> mm</span>
+          <span class="fld">每层切深 <span class="inp">1</span> mm</span>
+          <span class="mk-chk"><span class="mk-box">✓</span> 显示刀补偏置</span>
+        </div>
+        <div class="mk-legend" style="margin:0 0 8px">
+          <span><i style="border-color:var(--path)"></i>G01 切削</span>
+          <span><i class="dash" style="border-color:#9aa5b1"></i>G00 快移</span>
+          <span><i class="dot" style="border-color:var(--path2)"></i>刀补偏置</span>
+          <span><i class="cir" style="border-color:var(--cur)"></i>当前行</span>
+        </div>
+        <div class="mk-plot">
+          <svg viewBox="0 20 440 200" preserveAspectRatio="xMidYMid meet">
+            <g stroke="#e9edf3" stroke-width="1">
+              <path d="M20 30H420M20 70H420M20 110H420M20 150H420M20 190H420M20 30V210M100 30V210M180 30V210M260 30V210M340 30V210M420 30V210"/>
+            </g>
+            <g fill="none" stroke="#c9d2de" stroke-width="1" stroke-dasharray="3 4">
+              <path d="M40 190 L80 190 L80 60 L340 60"/>
+            </g>
+            <!-- 轮廓 -->
+            <path d="M80 60 H340 V170 H80 Z" fill="none" stroke="var(--path)" stroke-width="2.2"/>
+            <!-- 进刀斜线 -->
+            <path d="M40 190 L80 60" fill="none" stroke="var(--path)" stroke-width="2.2" opacity=".95"/>
+            <!-- 当前段（红/品红） -->
+            <path d="M80 170 H340" fill="none" stroke="var(--cur)" stroke-width="3.4" stroke-linecap="round"/>
+            <!-- 刀具圆 -->
+            <circle cx="340" cy="170" r="11" fill="none" stroke="var(--cur)" stroke-width="2"/>
+            <circle cx="340" cy="170" r="2.2" fill="var(--cur)"/>
+            <!-- 轴标注 -->
+            <g fill="#8d99a6" font-size="9" font-family="monospace">
+              <text x="22" y="24">Y 40</text><text x="22" y="196">Y -40</text>
+              <text x="386" y="222">X 60</text><text x="52" y="222">X -60</text>
+            </g>
+            <g fill="var(--path-dark,#22548a)" font-size="9.5" font-family="monospace" text-anchor="end">
+              <text x="426" y="46">X 60.00</text><text x="426" y="58">Y 20.00</text>
+            </g>
+          </svg>
+        </div>
+        <div class="mk-foot">点击刀轨可逐段定位，画布会高亮对应代码行；刀补偏置为示意，不能替代空运行。</div>
+      </section>
+
+      <!-- G/M 速查 -->
+      <section class="mk-card mk-rail">
+        <div class="mk-ch"><b>G/M 代码速查</b><span style="font-size:11px;color:var(--sub)">48 + 12 条</span></div>
+        <div class="mk-search"><span>搜索：G81 / 刀补 / 攻丝…</span></div>
+        <div class="mk-filters"><span class="on">全部</span><span>固定循环</span><span>坐标</span><span>补偿</span><span>M 代码</span></div>
+        <div class="mk-list">
+          <div class="mk-item"><span class="code">G00</span><span class="nm">快速定位</span><span class="lb">模态 G01</span></div>
+          <div class="mk-item sel"><span class="code">G01</span><span class="nm">直线插补</span><span class="lb">模态 G01</span></div>
+          <div class="mk-item"><span class="code">G02</span><span class="nm">顺时针圆弧插补</span><span class="lb">模态 G02</span></div>
+          <div class="mk-item"><span class="code">G04</span><span class="nm">暂停</span><span class="lb">非模态</span></div>
+          <div class="mk-item"><span class="code">G17</span><span class="nm">XY 平面选择</span><span class="lb">模态 G17</span></div>
+          <div class="mk-item"><span class="code">G21</span><span class="nm">公制输入</span><span class="lb">模态 G21</span></div>
+          <div class="mk-item"><span class="code">G41</span><span class="nm">刀具半径左补偿</span><span class="lb">模态 G41</span></div>
+          <div class="mk-item"><span class="code">G81</span><span class="nm">钻孔循环</span><span class="lb">固定循环</span></div>
+        </div>
+        <div class="mk-railfoot">界面同时支持 G 指令 48 条与 M 指令 12 条，可按分类筛选。</div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script>
+(function(){
+  var tpl = document.getElementById('mock-tpl');
+  // 往所有 slot 里克隆同一份界面，只改 data-s 决定用哪套令牌
+  document.querySelectorAll('.slot').forEach(function(slot){
+    var node = tpl.content.cloneNode(true);
+    node.querySelector('.mock').setAttribute('data-s', slot.getAttribute('data-s'));
+    slot.appendChild(node);
+  });
+
+  // 窄屏提示：模拟界面按真实宽度渲染，需要左右滑
+  document.querySelectorAll('.stage').forEach(function(st){
+    var tip = document.createElement('p');
+    tip.className = 'stage-tip';
+    tip.textContent = '界面按真实宽度（≥1060px）渲染，窄屏上可左右滑动看完整三列';
+    st.parentNode.insertBefore(tip, st);
+  });
+
+  var seg = document.getElementById('seg');
+  seg.addEventListener('click', function(e){
+    var b = e.target.closest('button');
+    if(!b) return;
+    var v = b.getAttribute('data-view');
+    seg.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
+    document.querySelectorAll('.view').forEach(function(v2){
+      v2.classList.toggle('on', v2.id === 'view-' + v);
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // 并排模式下点缩略图 → 进该方案
+  document.querySelectorAll('.cmp-item').forEach(function(it){
+    it.addEventListener('click', function(){
+      seg.querySelector('button[data-view="' + it.getAttribute('data-goto') + '"]').click();
+    });
+  });
+})();
+</script>
+</body>
+</html>
