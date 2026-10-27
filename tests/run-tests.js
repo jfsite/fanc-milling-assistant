@@ -524,6 +524,39 @@ ok('拟合半径正确', segC[0] && near(segC[0].r, 20, 0.05), segC[0] && segC[0
 const segSq = M.dwgFitArcs([[0,0],[40,0],[40,40],[0,40],[0,0]], 0.02);
 ok('方形全判为直线', segSq.every(s=>s.kind === 'line'), segSq.map(s=>s.kind));
 
+// 方向判定必须以拟合圆心为参照（v1.13.1 修）。用相对原点的叉积时，
+// 开折线隐含一条闭合弦，符号随弧的位置变，右下→左上的 90° 顺弧会被判成逆时针，
+// 生成 G03 扫 270°，预览里画成一整个圆——图纸演示案例当初就是这么露馅的。
+const quarterArc = (cx, cy, r, a0, a1, n)=>{
+  const out = [];
+  for(let i=0;i<=n;i++){ const a = a0 + (a1-a0)*i/n; out.push([cx + r*Math.cos(a), cy + r*Math.sin(a)]); }
+  return out;
+};
+const Q_CW = M.dwgFitArcs(quarterArc(50, 50, 10, -Math.PI/2, -Math.PI, 18), 0.02);
+ok('顺弧方向不被圆心位置带偏', Q_CW.length === 1 && Q_CW[0].kind === 'arc' && Q_CW[0].ccw === false,
+   Q_CW.map(s=>s.kind + ':' + s.ccw));
+const Q_CCW = M.dwgFitArcs(quarterArc(50, 50, 10, 0, Math.PI/2, 18), 0.02);
+ok('逆弧方向不被圆心位置带偏', Q_CCW.length === 1 && Q_CCW[0].ccw === true, Q_CCW.map(s=>s.kind + ':' + s.ccw));
+const Q_FAR = M.dwgFitArcs(quarterArc(200, 150, 20, Math.PI/2, 0, 20), 0.02);
+ok('远原点顺弧仍判为顺时针', Q_FAR.length === 1 && Q_FAR[0].ccw === false, Q_FAR.map(s=>s.kind + ':' + s.ccw));
+
+// 闭合轮廓：拟合必须补到首点，否则最后一段圆弧在闭合处被截断（多出一小段 G01 补线）。
+// 用演示图纸（100×80 圆角板，首尾隐式闭合，和真实上传的 SVG 一样）当样本。
+const BOX_PTS = M.parseSvgIR(M.DWG_DEMO_SVG).ir.contours[0].pts;
+const segBox = M.dwgFitArcs(BOX_PTS, 0.02, 5, true);
+const segBoxN = M.dwgFitArcs(BOX_PTS, 0.02, 5, false);
+ok('闭合拟合弧/线总数正确（4 弧 + 4 线）',
+   segBox.filter(s=>s.kind === 'arc').length === 4 && segBox.filter(s=>s.kind === 'line').length === 4,
+   segBox.map(s=>s.kind));
+ok('闭合拟合末段回到首点', near(segBox[segBox.length-1].x2, BOX_PTS[0][0], 1e-6)
+   && near(segBox[segBox.length-1].y2, BOX_PTS[0][1], 1e-6), segBox[segBox.length-1]);
+ok('不声明闭合时末段会截断（差异确认）',
+   !(near(segBoxN[segBoxN.length-1].x2, BOX_PTS[0][0], 1e-6)
+     && near(segBoxN[segBoxN.length-1].y2, BOX_PTS[0][1], 1e-6)), segBoxN[segBoxN.length-1]);
+ok('闭合后所有圆弧同向（4 个角都是 G02）',
+   segBox.filter(s=>s.kind === 'arc').every(s=>s.ccw === false),
+   segBox.filter(s=>s.kind === 'arc').map(s=>s.ccw));
+
 // 用圆的轮廓生成程序：应出现 G02/G03，而不是几十个 G01
 const irCircle = {contours:[{role:'outer', pts:circlePts(50, 50, 20, 60), closed:true}], holes:[], size:{w:40,h:40}};
 const ncC = M.irToNC(irCircle, {mat:'45钢', toolD:10, depth:2, ap:1, safeZ:10});
@@ -662,6 +695,19 @@ if(DEMO_IR.ok){
   ok('演示图纸生成程序 0 错误', DLRDEMO.issues.filter(x=>x.lv === 'error').length === 0,
      DLRDEMO.issues.filter(x=>x.lv==='error'));
   ok('演示图纸程序带刀补与孔循环', /G41 D01/.test(DGDEMO.code) && /G81/.test(DGDEMO.code));
+
+  // 案例与轨迹必须对得上：100×80 连接板四角 R10，每层就是 4 段 90° 顺弧，方向全部一致
+  const DEMO_ARCS = DGDEMO.code.split('\n').filter(l=>/^G0[23] /.test(l));
+  ok('每层 4 段圆弧、共 12 段', DEMO_ARCS.length === 12, DEMO_ARCS.length);
+  ok('四角圆弧全为 G02（顺铣外轮廓）', DEMO_ARCS.every(l=>/^G02 /.test(l)),
+     DEMO_ARCS.filter(l=>!/^G02 /.test(l)));
+  ok('四角圆弧半径均为 R10', DEMO_ARCS.every(l=>{
+    const m = /I(-?[\d.]+) J(-?[\d.]+)/.exec(l);
+    return m && Math.abs(Math.hypot(+m[1], +m[2]) - 10) < 0.02;
+  }), DEMO_ARCS[0]);
+  ok('闭合处圆弧未被截断（不再出现 8.05 补线）', !/X8\.05/.test(DGDEMO.code),
+     DGDEMO.code.split('\n').filter(l=>/X8\.05/.test(l)));
+  ok('轮廓闭合后无零长度 G01', !/G01 X10 Y80\s*\nG40/.test(DGDEMO.code));
 }
 
 // 文字演示案例：填表后各字段值正确

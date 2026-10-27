@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.13.0";
+  const APP_VERSION = "1.13.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -935,7 +935,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.13.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.13.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1820,7 +1820,7 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 
 1. **指标行**：轮廓数、孔数、层数（含 ap）、S、F、切削长度、预估工时
 2. **校验结果**：图纸层面的问题（D 系列）＋ 程序校验器的 43 条规则合并显示，每条带"为什么 / 怎么改"
-3. **刀轨图**：靛紫切削、灰色虚线快移、青绿点是钻孔位置；下面是完整程序文本
+3. **刀轨图**：靛紫切削、灰色虚线快移、青绿点是钻孔位置（图纸解析出孔径时再套一圈细线示意孔的大小）；下面是完整程序文本
 
 三个按钮：**载入编辑器**（继续手改）、**复制程序**、**下载 .nc**。
 
@@ -4907,15 +4907,21 @@ function dwgFitCircle(pts){
 }
 
 // 贪心：从当前点起，逐渐扩大窗口，只要还能用同一段圆弧拟合（误差 ≤ tol）就继续
-function dwgFitArcs(pts, tol, minPts){
+// closed=true：闭合轮廓。轮廓点列是隐式闭合的（dwgDedupe 会删掉与首点重合的尾点），
+// 不把首点补到末尾的话，最后一段圆弧会在闭合处被截断，末尾多出一小段 G01 补线。
+function dwgFitArcs(pts, tol, minPts, closed){
   const T = tol || 0.02, MIN = minPts || 5;
   const out = [];
   let i = 0;
-  const N = pts.length;
+  const N0 = pts.length;
+  const P = (closed && N0 > 2
+      && Math.hypot(pts[0][0]-pts[N0-1][0], pts[0][1]-pts[N0-1][1]) > 1e-6)
+    ? pts.concat([[pts[0][0], pts[0][1]]]) : pts;
+  const N = P.length;
   while(i < N-1){
     let best = null, bestEnd = i+1;
     for(let j = i + MIN; j <= Math.min(N - 1, i + 80); j++){
-      const win = pts.slice(i, j+1);
+      const win = P.slice(i, j+1);
       const fit = dwgFitCircle(win);
       if(fit && fit.err <= T && fit.r < 5000 && fit.r > 0.2){
         best = fit; bestEnd = j;
@@ -4924,23 +4930,30 @@ function dwgFitArcs(pts, tol, minPts){
       }
     }
     if(best && bestEnd > i + MIN - 1){
-      const a = pts[i], b2 = pts[bestEnd];
-      // 方向：用窗口内点的有向面积判断
+      const a = P[i], b2 = P[bestEnd];
+      // 方向：以拟合圆心为参照算有向面积。
+      // 不能用相对原点的叉积——开折线的叉积和里含一条"隐式闭合弦"的贡献，
+      // 符号会随圆弧所在位置变化而不是随走向变化，90° 圆弧会被判反
+      // （输出 G03 扫 270°，预览里画成一整个圆）。v1.13.1 修。
       let area = 0;
-      for(let k=i;k<bestEnd;k++) area += pts[k][0]*pts[k+1][1] - pts[k+1][0]*pts[k][1];
+      for(let k=i;k<bestEnd;k++){
+        const ax = P[k][0]-best.cx, ay = P[k][1]-best.cy;
+        const bx = P[k+1][0]-best.cx, by = P[k+1][1]-best.cy;
+        area += ax*by - bx*ay;
+      }
       // 整圈：首尾重合时补一段完整圆
       const ccw = area > 0;
       out.push({kind:'arc', x1:a[0], y1:a[1], x2:b2[0], y2:b2[1],
                 cx:best.cx, cy:best.cy, r:best.r, ccw:ccw});
       i = bestEnd;
     } else {
-      const a = pts[i], b2 = pts[i+1];
+      const a = P[i], b2 = P[i+1];
       out.push({kind:'line', x1:a[0], y1:a[1], x2:b2[0], y2:b2[1]});
       i++;
     }
   }
   if(i === N-1 && out.length){
-    const last = out[out.length-1], p = pts[N-1];
+    const last = out[out.length-1], p = P[N-1];
     if(last.kind === 'line' && Math.hypot(last.x2-p[0], last.y2-p[1]) > 1e-9){
       out.push({kind:'line', x1:last.x2, y1:last.y2, x2:p[0], y2:p[1]});
     }
@@ -5033,7 +5046,9 @@ function irToNC(ir, opt){
       push('G01 Z-' + f2(z) + ' F' + plungeF);
       push('G41 D' + T + ' X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]) + ' F' + feed);
       // 能拟合成圆弧的就出 G02/G03，剩下的走 G01
-      const segs = (o.noArc || pts.length < 6) ? null : dwgFitArcs(pts, o.arcTol || 0.02);
+      // 闭合轮廓要告诉拟合器（第 4 个参数），否则闭合处那段圆弧的末尾会被切断
+      const segs = (o.noArc || pts.length < 6) ? null : dwgFitArcs(pts, o.arcTol || 0.02, 5, !open);
+      let lastPt = pts[0];
       if(segs && segs.length && segs.filter(x=>x.kind === 'arc').length){
         segs.forEach(sg=>{
           if(sg.kind === 'line'){
@@ -5043,9 +5058,13 @@ function irToNC(ir, opt){
             push((sg.ccw ? 'G03' : 'G02') + ' X' + f2(sg.x2) + ' Y' + f2(sg.y2)
               + ' I' + f2(I) + ' J' + f2(J));
           }
+          lastPt = [sg.x2, sg.y2];
         });
       } else {
-        for(let i=1;i<pts.length;i++) push('G01 X' + f2(pts[i][0]) + ' Y' + f2(pts[i][1]));
+        for(let i=1;i<pts.length;i++){
+          push('G01 X' + f2(pts[i][0]) + ' Y' + f2(pts[i][1]));
+          lastPt = pts[i];
+        }
       }
       if(open){
         // 开放段：不回到起点，沿末段方向延长退刀
@@ -5054,7 +5073,10 @@ function irToNC(ir, opt){
         let dn = Math.hypot(dx, dy) || 1;
         push('G40 X' + f2(b2[0] + dx/dn*lead) + ' Y' + f2(b2[1] + dy/dn*lead));
       } else {
-        push('G01 X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]));
+        // 闭合轮廓拟合后末点已落在起点上，就不要再多发一条零长度 G01
+        if(Math.hypot(lastPt[0]-pts[0][0], lastPt[1]-pts[0][1]) > 1e-6){
+          push('G01 X' + f2(pts[0][0]) + ' Y' + f2(pts[0][1]));
+        }
         push('G40 X' + f2(leadPt[0]) + ' Y' + f2(leadPt[1]));
       }
     }
@@ -5671,8 +5693,16 @@ function dwgDrawPath(res){
   });
   ctx.setLineDash([]);
   if(res.holes && res.holes.length){
-    ctx.fillStyle = 'rgba(15,118,110,.55)';
+    // 孔位：实心点 = G81 循环落点；图纸解析出的孔径已知时再套一圈细线，直观看出孔的实际大小
+    const irHoles = (DWG && DWG.ir && DWG.ir.holes) || [];
     res.holes.forEach(ho=>{
+      const ih = irHoles.find(h=>Math.hypot(h.x-ho.x, h.y-ho.y) < 0.5);
+      if(ih && ih.d > 0){
+        ctx.beginPath();
+        ctx.arc(view.X(ho.x), view.Y(ho.y), Math.max(2, ih.d/2*view.s), 0, 2*Math.PI);
+        ctx.setLineDash([]); ctx.strokeStyle = 'rgba(15,118,110,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(15,118,110,.55)';
       ctx.beginPath();
       ctx.arc(view.X(ho.x), view.Y(ho.y), Math.max(2, (ho.r || 1)*view.s), 0, 2*Math.PI);
       ctx.fill();
