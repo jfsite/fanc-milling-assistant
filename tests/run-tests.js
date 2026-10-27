@@ -800,6 +800,76 @@ ok('dwgDemoPng 导出 image/png 且文件名带 .png',
 ok('上传区 accept 含 image/png（下载的图能直接选回来）',
    /id="dwg-file"[^>]*accept="[^"]*image\/png/.test(html));
 
+// --- 16. 模板库三个工艺样例 ---
+// 不只是"能跑通"：样例要能直接送进刀轨演示，刀心轨迹必须不过切
+const TPL = {};
+M.TEMPLATES.forEach(t=>{ TPL[t.t] = t; });
+['平面铣削样例', '外轮廓加工样例', '内轮廓加工样例'].forEach(name=>{
+  ok('模板库有「' + name + '」', !!TPL[name], Object.keys(TPL));
+});
+ok('三个样例都打了「样例」标记',
+   ['平面铣削样例','外轮廓加工样例','内轮廓加工样例'].every(n=>TPL[n] && TPL[n].tag === '样例'));
+ok('样例渲染时输出 sample 标签', /t\.tag \? `<span class="tag sample">/.test(js));
+
+// 平面铣削：行切
+const TPL_FACE = TPL['平面铣削样例'] ? TPL['平面铣削样例'].code : '';
+ok('平面铣削样例 6 行往复行切', (TPL_FACE.match(/G01 X(135|-15) F240/g) || []).length === 6,
+   (TPL_FACE.match(/G01 X(135|-15) F240/g) || []).length);
+ok('平面铣削样例行距 16（0.8D）', /Y-6;/.test(TPL_FACE) && /Y10;/.test(TPL_FACE)
+   && /Y26;/.test(TPL_FACE) && /Y42;/.test(TPL_FACE) && /Y58;/.test(TPL_FACE) && /Y72;/.test(TPL_FACE));
+// 6 行里有 5 次行间抬刀（最后一行直接抬到 Z50）
+ok('平面铣削行间抬刀后再横移（不划伤已加工面）',
+   (TPL_FACE.match(/G00 Z2;/g) || []).length === 5, (TPL_FACE.match(/G00 Z2;/g) || []).length);
+ok('平面铣削两端各切出毛坯 15mm', /X-15/.test(TPL_FACE) && /X135/.test(TPL_FACE));
+const TPL_FACE_PATH = M.buildPath(TPL_FACE, {toolR:10});
+ok('平面铣削刀轨覆盖毛坯全宽 0~80',
+   TPL_FACE_PATH.bboxCut && TPL_FACE_PATH.bboxCut.minY <= -6 + 1e-6 && TPL_FACE_PATH.bboxCut.maxY >= 72,
+   TPL_FACE_PATH.bboxCut);
+ok('平面铣削不用刀补（面铣直接走刀心）', !/G4[12]/.test(TPL_FACE));
+
+// 外轮廓：顺时针 + G41，切线引入
+const TPL_OUT = TPL['外轮廓加工样例'] ? TPL['外轮廓加工样例'].code : '';
+ok('外轮廓样例顺时针走刀配 G41', /G41 D01 X0 Y0/.test(TPL_OUT)
+   && /G01 Y80;/.test(TPL_OUT) && /X100;/.test(TPL_OUT) && /Y0;/.test(TPL_OUT) && /X0;/.test(TPL_OUT));
+ok('外轮廓沿同一条线引入与退出（无斜插尖刺）',
+   /G00 X0 Y-18;/.test(TPL_OUT) && /G40 X0 Y-18;/.test(TPL_OUT));
+const TPL_OUT_COMP = M.compRuns(M.buildPath(TPL_OUT, {toolR:6}), 6);
+ok('外轮廓刀补产生 1 组偏置', TPL_OUT_COMP.length === 1, TPL_OUT_COMP.length);
+ok('外轮廓刀心全在工件外侧（不切入 100×80 内部）',
+   TPL_OUT_COMP.length === 1 && TPL_OUT_COMP[0].pts.every(p=> !(p[0] > 0.01 && p[0] < 99.99 && p[1] > 0.01 && p[1] < 79.99)),
+   TPL_OUT_COMP.length ? TPL_OUT_COMP[0].pts.filter(p=>p[0]>0.01&&p[0]<99.99&&p[1]>0.01&&p[1]<79.99).slice(0,3) : null);
+ok('外轮廓刀心包住工件（X -6..106、顶边 86）',
+   TPL_OUT_COMP.length === 1 && (()=>{
+     const xs = TPL_OUT_COMP[0].pts.map(p=>p[0]), ys = TPL_OUT_COMP[0].pts.map(p=>p[1]);
+     return Math.abs(Math.min(...xs)+6) < 0.01 && Math.abs(Math.max(...xs)-106) < 0.01
+         && Math.abs(Math.max(...ys)-86) < 0.01 && Math.min(...ys) <= -6 + 1e-6;
+   })(), TPL_OUT_COMP.length ? TPL_OUT_COMP[0].pts.map(p=>p.map(v=>+v.toFixed(2))) : null);
+
+// 内轮廓：逆时针 + G41，圆弧切入
+const TPL_IN = TPL['内轮廓加工样例'] ? TPL['内轮廓加工样例'].code : '';
+ok('内轮廓样例逆时针走刀配 G41', /G41 D01 X38 Y32/.test(TPL_IN)
+   && /G01 X80;/.test(TPL_IN) && /G01 Y60;/.test(TPL_IN) && /G01 X20;/.test(TPL_IN) && /G01 Y20;/.test(TPL_IN));
+ok('内轮廓用圆弧切入（避免角点直插留下的过切）', /G03 X50 Y20 I12 J0;/.test(TPL_IN));
+ok('内轮廓退刀回腔中心再取消刀补', /G40 X50 Y40;/.test(TPL_IN));
+const TPL_IN_COMP = M.compRuns(M.buildPath(TPL_IN, {toolR:6}), 6);
+ok('内轮廓刀补产生 1 组偏置', TPL_IN_COMP.length === 1, TPL_IN_COMP.length);
+// 型腔 60×40（X20~80 / Y20~60），φ12 → 刀心必须留在偏置轨迹 26~74 / 26~54 内
+ok('内轮廓刀心全在偏置轨迹内（不啃腔壁）',
+   TPL_IN_COMP.length === 1 && TPL_IN_COMP[0].pts.every(p=> p[0] >= 26-0.01 && p[0] <= 74+0.01 && p[1] >= 26-0.01 && p[1] <= 54+0.01),
+   TPL_IN_COMP.length ? TPL_IN_COMP[0].pts.filter(p=>p[0]<26-0.01||p[0]>74+0.01||p[1]<26-0.01||p[1]>54+0.01).slice(0,3) : null);
+ok('内轮廓刀心贴满腔壁（26..74 / 26..54）',
+   TPL_IN_COMP.length === 1 && (()=>{
+     const xs = TPL_IN_COMP[0].pts.map(p=>p[0]), ys = TPL_IN_COMP[0].pts.map(p=>p[1]);
+     return Math.abs(Math.min(...xs)-26) < 0.01 && Math.abs(Math.max(...xs)-74) < 0.01
+         && Math.abs(Math.min(...ys)-26) < 0.01 && Math.abs(Math.max(...ys)-54) < 0.01;
+   })());
+ok('内/外轮廓刀补方向相反（外 CW+G41、内 CCW+G41）', (()=>{
+  const shoelace = pts => { let a = 0; for(let i=0;i<pts.length;i++){ const q=pts[i], r=pts[(i+1)%pts.length]; a += q[0]*r[1] - r[0]*q[1]; } return a; };
+  const outSeq = [[0,0],[0,80],[100,80],[100,0]];
+  const inSeq = [[50,20],[80,20],[80,60],[20,60],[20,20]];
+  return shoelace(outSeq) < 0 && shoelace(inSeq) > 0 && /G41/.test(TPL_OUT) && /G41/.test(TPL_IN);
+})());
+
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
 process.exit(fail ? 1 : 0);
