@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-26 19:45　｜　代码版本：v1.12.2（`app.html` 1.50 MB / 1,496,543 字节，11 个面板，277 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
+> 最后更新：2026-10-27 17:58　｜　代码版本：v1.13.0（`app.html` 1.50 MB / 1,499,288 字节，11 个面板，290 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
 
 ---
 
@@ -147,7 +147,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV | `runBatch()` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
 | 9 | 刀具库 | T 号 / 直径 / 刃数 / 补偿半径一处录入，参数计算·刀轨·图纸三处联动 | `toolNorm()` `toolListNorm()` `toolFindByD()` `toolSummary()` `renderToolLib()` |
-| 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序）+ 文字描述生成 | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
+| 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序，内置演示案例）+ 文字描述生成（两个演示案例填参） | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
 | 11 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
 
 跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`、刀具库统一取刀（`#c-toolpick` / `#p-toolpick` / `#dw-toolpick` 三个下拉）。
@@ -247,7 +247,7 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：277 项，0 失败。
+7. **测试全绿才算完成**：290 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
 10. **样式改动只动令牌与断点**：不要在 HTML 里追加新的内联颜色/圆角；确需特例（如截图脚本要用的尺寸）写进 `<style>` 并注释原因。

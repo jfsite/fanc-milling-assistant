@@ -49,7 +49,7 @@ fs.writeFileSync(modPath,
      + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
      + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw, dwgOpenIR,'
      + ' toolNorm, toolListNorm, toolRadius, toolDNo, toolSummary, toolFindByD, toolCsv, toolAt, toolSeed, TOOL_SEED,'
-     + ' renderToolLib, renderToolPicks, TOOL_MAX};');
+     + ' renderToolLib, renderToolPicks, TOOL_MAX, DWG_DEMO_SVG, AI_DEMOS, aiDemoFill};');
 const M = require(modPath);
 
 let pass = 0, fail = 0;
@@ -642,6 +642,53 @@ ok('三个下拉都按刀具库渲染',
    (opts.match(/<option/g) || []).length === M.TOOL_SEED.length + 1
    && store['p-toolpick'].innerHTML.indexOf('T01') > 0
    && store['dw-toolpick'].innerHTML.indexOf('T01') > 0, opts);
+
+// --- 15. AI 模块演示案例 ---
+ok('演示图纸是合法 SVG', /<svg\b[^>]*>/.test(M.DWG_DEMO_SVG));
+const DEMO_IR = M.parseSvgIR(M.DWG_DEMO_SVG);
+ok('演示图纸解析成功', DEMO_IR.ok, DEMO_IR.error);
+ok('演示图纸 = 1 条外轮廓 + 2 个孔',
+   DEMO_IR.ok && DEMO_IR.ir.contours.length === 1 && DEMO_IR.ir.holes.length === 2,
+   DEMO_IR.ok ? {c: DEMO_IR.ir.contours.length, h: DEMO_IR.ir.holes.length} : DEMO_IR.error);
+ok('演示图纸尺寸 100×80',
+   DEMO_IR.ok && Math.abs(DEMO_IR.ir.size.w - 100) < 0.1 && Math.abs(DEMO_IR.ir.size.h - 80) < 0.1,
+   DEMO_IR.ok ? DEMO_IR.ir.size : null);
+ok('演示图纸孔径 φ10', DEMO_IR.ok && DEMO_IR.ir.holes.every(h => Math.abs(h.d - 10) < 0.05), DEMO_IR.ok ? DEMO_IR.ir.holes : null);
+
+// 演示图纸生成的程序必须 0 错误（与上传图纸同一套 irToNC + lintProgram）
+if(DEMO_IR.ok){
+  const DGDEMO = M.irToNC(DEMO_IR.ir, DOPT);
+  const DLRDEMO = M.lintProgram(DGDEMO.code, {pitch:1.5, nmax:8000});
+  ok('演示图纸生成程序 0 错误', DLRDEMO.issues.filter(x=>x.lv === 'error').length === 0,
+     DLRDEMO.issues.filter(x=>x.lv==='error'));
+  ok('演示图纸程序带刀补与孔循环', /G41 D01/.test(DGDEMO.code) && /G81/.test(DGDEMO.code));
+}
+
+// 文字演示案例：填表后各字段值正确
+const AITYPE = document.getElementById('ai-type');
+M.aiDemoFill(0);
+ok('演示案例 1 填入平面铣削参数',
+   AITYPE.value === '平面铣削' && document.getElementById('ai-material').value === '45钢'
+   && document.getElementById('ai-d').value === 10
+   && document.getElementById('ai-req').value === M.AI_DEMOS[0].req,
+   {t:AITYPE.value, d:document.getElementById('ai-d').value});
+M.aiDemoFill(1);
+ok('演示案例 2 填入孔加工参数',
+   AITYPE.value === '孔加工' && document.getElementById('ai-material').value === '铝合金'
+   && document.getElementById('ai-d').value === 8
+   && document.getElementById('ai-req').value === M.AI_DEMOS[1].req,
+   {t:AITYPE.value, d:document.getElementById('ai-d').value});
+ok('演示案例引用的加工类型/材料都存在于下拉选项', M.AI_DEMOS.every(d =>
+   html.indexOf('value="' + d.type + '"') > 0 && html.indexOf('value="' + d.material + '"') > 0));
+
+// 源码契约：演示按钮必须走与上传相同的入口
+ok('图纸演示按钮绑定 dwgDemo', /btn-dwg-demo[\s\S]{0,40}onclick\s*=\s*dwgDemo/.test(js)
+   || /dwgDemo/.test(js.slice(js.indexOf("btn-dwg-demo") - 200, js.indexOf("btn-dwg-demo") + 200)));
+ok('dwgDemo 构造 File 后调 dwgHandleFile', /new File\(\[new Blob\(\[DWG_DEMO_SVG\]/.test(js)
+   && /dwgHandleFile\(f\)/.test(js.slice(js.indexOf('function dwgDemo'), js.indexOf('function dwgDemo') + 400)));
+ok('文字演示按钮绑定 aiDemoFill',
+   /btn-ai-demo1'\)\.onclick\s*=\s*\(\)\s*=>\s*aiDemoFill\(0\)/.test(js)
+   && /btn-ai-demo2'\)\.onclick\s*=\s*\(\)\s*=>\s*aiDemoFill\(1\)/.test(js));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
