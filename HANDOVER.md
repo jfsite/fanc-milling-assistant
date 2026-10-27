@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-27 22:52　｜　代码版本：v1.18.3（`app.html` 1.53 MB / 1,536,645 字节，11 个面板，453 项断言）　｜　**已发布上线 v1.18.0**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.0，见 §9.5）
+> 最后更新：2026-10-27 22:52　｜　代码版本：v1.18.3（`app.html` 1.53 MB / 1,536,645 字节，11 个面板，453 项断言）　｜　**已发布上线 v1.18.3**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.3，见 §9.5）
 
 ---
 
@@ -254,18 +254,18 @@ node tools/release.js                                  # 3. 快照 + tag
 
 ---
 
-## 6. 发布状态（已解决；最近一次发布 v1.18.0 · 2026-10-27）
+## 6. 发布状态（已解决；最近一次发布 v1.18.3 · 2026-10-27）
 
 **已发布上线**，走的是之前判定可行的「路径 B 新工作区」。
 
 | 项 | 值 |
 |---|---|
 | 工作区 | `D:\WorkBuddy\fanc-milling-app`（新目录，无历史应用登记） |
-| 分享链接（对外分发用这个） | `https://fanuc-milling-w.app.workbuddy.host/app.html?sharecode=OTD3JQJQPI&v=1.18.0` |
+| 分享链接（对外分发用这个） | `https://fanuc-milling-w.app.workbuddy.host/app.html?sharecode=OTD3JQJQPI&v=1.18.3` |
 | 裸链接（会命中旧缓存，别发） | `https://fanuc-milling-w.app.workbuddy.host/?sharecode=OTD3JQJQPI` |
 | 应用 ID | `wbapp_5TAJvvE8eVrSjSP13oJroH`（marker 文件 `.wbapp_5TAJvvE8eVrSjSP13oJroH.genie`） |
-| 线上内容（v1.18.0） | 1,527,907 字节 = 本地 `app.html` 完全等长，徽标 `v1.18.0`；`version.json` 同为 1.18.0（需带 sharecode 才能取到） |
-| 二维码 | `qrcode.png`（492×630）编码 `…/app.html?sharecode=OTD3JQJQPI`，副标题显示「11 个模块 · v1.18.0」，由 `tools/make-qrcode.py` 自动生成 |
+| 线上内容（v1.18.3） | 1,536,645 字节 = 本地 `app.html` 完全等长，徽标 `v1.18.3`；`version.json` 同为 1.18.3（需带 sharecode 才能取到） |
+| 二维码 | `qrcode.png`（492×630）编码 `…/app.html?sharecode=OTD3JQJQPI`，副标题显示「11 个模块 · v1.18.3」，由 `tools/make-qrcode.py` 自动生成 |
 
 **注意：链接必须带 `?sharecode=OTD3JQJQPI`**，且**对外分发要再带 `&v=<版本>`**。原因见下。
 
