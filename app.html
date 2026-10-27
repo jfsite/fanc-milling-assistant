@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.14.0";
+  const APP_VERSION = "1.14.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -937,7 +937,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.14.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.14.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1805,9 +1805,9 @@ G43 H01 Z10 M03 S3661
 M08
 (TOOL RADIUS 5 -> SET IN D01)
 (CONTOUR 1 OUTER PASS 1/3 Z-1)
-G00 Z10 / G00 X.. Y..（最高点上方切入位置）
+G00 Z10 / G00 X.. Y..（外侧、最长边中点斜上方 25° 的引刀点）
 G01 Z-1 F175
-G41 D01 X.. Y.. F439        ← 建立刀补切入
+G41 D01 X.. Y.. F439        ← 建立刀补：斜向切入到最长边中点
 G01 ...（沿轮廓）
 G01 X.. Y..（回到起点）
 G40 X.. Y..                 ← 取消刀补退刀
@@ -1878,7 +1878,9 @@ M09 / M05 / G91 G28 Z0 / G90 / M30
 
 ![图 12 · 断口用红圈标出（这张示意图被识别成 8 段弧，之间有 7 处断开）](img:gaps-real)
 
-开口段的引刀/退刀沿第一段/末段方向延长一个 `刀半径+2mm`，和闭合轮廓的引刀逻辑一致。
+开口段的引刀/退刀沿第一段/末段方向延长一个 `刀半径+2mm`。
+
+闭合轮廓的引刀不一样：**从最长边的中点、沿 25° 斜向切入**（引刀点在零件外上方，退刀沿原路返回）。之所以不垂直扎下去——刀补建立的那一段，终点会被偏到「垂直于走刀方向」的一侧；垂直切入时这个方向正好**沿着轮廓**，等于在切入点多切掉一个刀半径的月牙坑。斜向切入把这个偏差压到 0.5mm 以内。
 
 #### 11.2.7 手动建模：改图元 / 贴基点坐标
 
@@ -4977,6 +4979,23 @@ function dwgTopIdx(pts){
   return k;
 }
 function dwgRotate(pts, k){ return pts.slice(k).concat(pts.slice(0, k)); }
+
+// 外轮廓起刀点：最长直边的中点（引刀落在直边上，不压在圆角上）。
+// 长度并列时取位置靠上的那条，保证引刀在零件上方而不是下方。
+function dwgStartMid(pts){
+  const n = pts.length;
+  let bi = 0, bl = -1, by = -Infinity;
+  for(let i=0;i<n;i++){
+    const a = pts[i], b = pts[(i+1)%n];
+    const L = Math.hypot(b[0]-a[0], b[1]-a[1]);
+    const my = (a[1]+b[1])/2;
+    if(L > bl + 1e-6 || (Math.abs(L - bl) <= 1e-6 && my > by)){ bl = L; bi = i; by = my; }
+  }
+  const a = pts[bi], b = pts[(bi+1)%n];
+  const mid = [+((a[0]+b[0])/2).toFixed(6), +((a[1]+b[1])/2).toFixed(6)];
+  return [mid].concat(dwgRotate(pts, (bi+1)%n));
+}
+const LEAD_ANG = 25*Math.PI/180;   // 斜向引刀与轮廓的夹角（越小越贴轮廓，刀补建立时过切越小）
 function dwgCentroid(pts){
   let x = 0, y = 0;
   pts.forEach(p=>{ x += p[0]; y += p[1]; });
@@ -5030,7 +5049,9 @@ function irToNC(ir, opt){
   contours.forEach((c, ci)=>{
     const inner = c.role === 'inner';
     const open = !!c.open;      // 断口后的开放段：首尾不相接，不补线
-    let pts = open ? c.pts.slice() : dwgRotate(c.pts, dwgTopIdx(c.pts));
+    // 起刀点：外轮廓取「最长直边的中点」，引刀落在直边上而不是压着圆角；
+    // 内轮廓仍取最高点，沿「最高点 → 形心」方向在槽内下刀。
+    let pts = open ? c.pts.slice() : (inner ? dwgRotate(c.pts, dwgTopIdx(c.pts)) : dwgStartMid(c.pts, c.role));
     const top = pts[0];
     let leadPt;
     if(open){
@@ -5044,7 +5065,15 @@ function irToNC(ir, opt){
       const dx = g[0]-top[0], dy = g[1]-top[1], dn = Math.hypot(dx, dy) || 1;
       leadPt = [top[0] + dx/dn*lead, top[1] + dy/dn*lead];
     } else {
-      leadPt = [top[0], top[1] + lead];
+      // 斜向引刀：沿第一段走向后退 Lt、再沿外法向抬高 lead（约 25°），
+      // 不能从正上方垂直切入——那样刀补建立段的终点会被偏到轮廓线上（沿轮廓方向偏一个刀半径），
+      // 等于在切入点多切掉一个刀半径的月牙坑。
+      const p1 = pts[1] || top;
+      const dd = Math.hypot(p1[0]-top[0], p1[1]-top[1]) || 1;
+      const ux = (p1[0]-top[0])/dd, uy = (p1[1]-top[1])/dd;   // 第一段方向
+      const nx = -uy, ny = ux;                                 // 左法向 = 外侧（外轮廓顺时针）
+      const Lt = Math.min(Math.max(lead/Math.tan(LEAD_ANG), lead), 3*lead);
+      leadPt = [top[0] - ux*Lt + nx*lead, top[1] - uy*Lt + ny*lead];
     }
     for(let k=1;k<=nPass;k++){
       const z = +(ap*k).toFixed(2);
@@ -5250,7 +5279,8 @@ const DWG_SYSTEM = [
   '3) 相邻图元首尾相接，误差 <0.05mm；顺序随意，本地会自动串接。',
   '4) dims 只收图上真印着的数字（含 R 值），text 必须是原文；没印就不写。',
   '5) 原点取轮廓左下角，X 向右 Y 向上，单位 mm。孔用 circle 且 role=hole。',
-  '6) 照片按文字方向理解，忽略页面边框、阴影、手指。不是二维零件图就返回 {"error":"原因"}。'
+  '6) 照片按文字方向理解，忽略页面边框、阴影、手指。不是二维零件图就返回 {"error":"原因"}。',
+  '7) 孔位按图上标注推算：给了孔心距 / 到边距离就按标注值定位，多个孔对称或等距时必须保持对称等距，不要凭目测偏出几毫米。'
 ].join('');
 
 // 归一化一个图元：统一成 {kind:'line'|'arc'|'circle', ...}
@@ -5395,7 +5425,10 @@ function dwgPrimsToSvg(rawPrims, opt){
       d.push(head + 'L' + pb[0] + ' ' + pb[1]);
     } else {
       const large = Math.abs(p.sw) > 180 ? 1 : 0;
-      const sweep = p.sw > 0 ? 1 : 0;   // 数学逆时针 + Y 翻转 = 屏幕顺时针 = sweep 1
+      // SVG 的 sweep=1 表示「在 y 向下的屏幕坐标里顺时针」。
+      // 数学逆时针圆弧经上面 sx() 的 Y 翻转后，在屏幕上是顺时针，sweep 必须写 0；
+      // 写成 1 会把每个圆角镜像成凹角（凸 R10 变成向内挖 3mm 的缺口）。
+      const sweep = p.sw > 0 ? 0 : 1;
       d.push(head + 'A' + p.r + ' ' + p.r + ' 0 ' + large + ' ' + sweep + ' ' + pb[0] + ' ' + pb[1]);
     }
     prev = pb;
@@ -6053,8 +6086,9 @@ function dwgDemoPngCanvas(){
   line(X0 + R - R*0.707, Y0 + R - R*0.707, 96, 116, 1.5);
   text('R10', 58, 108, 30);
 
-  // 技术要求 + 标题栏
-  text('技术要求：未注圆角 R2，未注公差按 GB/T 1804-m', 120, 936, 22);
+  // 技术要求 + 标题栏（第二行给孔位尺寸：位图识别时模型按标注推算孔位，不靠目测）
+  text('技术要求：未注圆角 R2，未注公差按 GB/T 1804-m', 120, 914, 22);
+  text('2×φ10 通孔　孔心距 50　距左边 25　距底边 40', 120, 944, 22);
   g.lineWidth = 2; g.strokeRect(1000, 840, 340, 100);
   line(1000, 874, 1340, 874, 2);
   line(1000, 908, 1340, 908, 2);

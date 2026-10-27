@@ -47,6 +47,7 @@ fs.writeFileSync(modPath,
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
      + ' dwgBBox, dwgPrimsToSvg, dwgNormPrim, dwgPrimPt, dwgPrimLen, dwgSelfIntersect, dwgDimsCheck,'
+     + ' dwgStartMid, LEAD_ANG, dwgTopIdx, dwgRotate, dwgDedupe,'
      + ' dwgFitCircle, dwgFitArcs, dwgParsePoints, dwgArcFrom2Pts, dwgPointsToPrims, dwgPrimToRaw, dwgOpenIR,'
      + ' toolNorm, toolListNorm, toolRadius, toolDNo, toolSummary, toolFindByD, toolCsv, toolAt, toolSeed, TOOL_SEED,'
      + ' renderToolLib, renderToolPicks, TOOL_MAX, DWG_DEMO_SVG, AI_DEMOS, aiDemoFill};');
@@ -380,7 +381,7 @@ ok('生成程序有刀补建立与取消', /G41 D01/.test(DCODE1) && /G40/.test(
 ok('深度 3 / ap 1 = 3 层', DG1.meta.nPass === 3 && (DCODE1.match(/OUTER PASS/g) || []).length === 3);
 ok('主轴与进给已算出', DG1.meta.sp > 0 && DG1.meta.feed > 0, DG1.meta);
 ok('含安全高度与回参考点', /G00 Z10/.test(DCODE1) && /G91 G28 Z0/.test(DCODE1));
-ok('外轮廓从最高点切入（Y=50）', new RegExp('G41 D01 X[\\d.]+ Y50').test(DCODE1), DCODE1.split('\n').filter(l=>/G41/.test(l)));
+ok('外轮廓从最高边中点切入（Y=50）', new RegExp('G41 D01 X[\\d.]+ Y50').test(DCODE1), DCODE1.split('\n').filter(l=>/G41/.test(l)));
 
 // 方向：外轮廓必须为顺时针（G41 + 顺铣），用 y 递减段验证第一个角点
 const DG2 = M.irToNC({contours:[{role:'outer', pts:[[0,0],[50,0],[50,50],[0,50]], closed:true}], holes:[], size:{w:50,h:50}}, DOPT);
@@ -708,6 +709,60 @@ if(DEMO_IR.ok){
   ok('闭合处圆弧未被截断（不再出现 8.05 补线）', !/X8\.05/.test(DGDEMO.code),
      DGDEMO.code.split('\n').filter(l=>/X8\.05/.test(l)));
   ok('轮廓闭合后无零长度 G01', !/G01 X10 Y80\s*\nG40/.test(DGDEMO.code));
+}
+
+// --- 位图链路：图元 → SVG 的圆弧 sweep 标志 ---
+// 写反会把每个圆角镜像成凹角（凸 R10 变成向内挖 3mm 的缺口），模型按顺时针/逆时针报都出过
+const BITMAP_PRIMS = [
+  {type:'line', x1:10, y1:0, x2:90, y2:0},
+  {type:'arc', cx:90, cy:10, r:10, a0:270, a1:360},
+  {type:'line', x1:100, y1:10, x2:100, y2:70},
+  {type:'arc', cx:90, cy:70, r:10, a0:0, a1:90},
+  {type:'line', x1:90, y1:80, x2:10, y2:80},
+  {type:'arc', cx:10, cy:70, r:10, a0:90, a1:180},
+  {type:'line', x1:0, y1:70, x2:0, y2:10},
+  {type:'arc', cx:10, cy:10, r:10, a0:180, a1:270},
+  {type:'circle', cx:25, cy:40, r:5, role:'hole'},
+  {type:'circle', cx:75, cy:40, r:5, role:'hole'}
+];
+const BITMAP_PRIMS_CW = BITMAP_PRIMS.map(p=> p.type === 'arc'
+  ? Object.assign({}, p, {a0:p.a1, a1:p.a0}) : p);
+[['逆时针', BITMAP_PRIMS], ['顺时针', BITMAP_PRIMS_CW]].forEach(pair=>{
+  const tag = pair[0], prims = pair[1];
+  const irB = M.parseSvgIR(M.dwgPrimsToSvg(prims).svg).ir;
+  const arcsB = M.dwgFitArcs(irB.contours[0].pts, 0.02, 5, true).filter(s=>s.kind === 'arc');
+  const centers = arcsB.map(a=>[Math.round(a.cx), Math.round(a.cy)]);
+  ok('位图图元（' + tag + '）四角还原成凸圆角（圆心在内侧，不是镜像凹角）',
+     JSON.stringify(centers) === JSON.stringify([[90,10],[90,70],[10,70],[10,10]]), centers);
+});
+const IR_BMP = M.parseSvgIR(M.dwgPrimsToSvg(BITMAP_PRIMS).svg).ir;
+const NC_BMP = M.irToNC(IR_BMP, DOPT).code;
+const ARCS_BMP = NC_BMP.split('\n').filter(l=>/^G0[23] /.test(l));
+ok('位图链路四角圆弧全为 G02（与 SVG 链路同一结果）',
+   ARCS_BMP.length === 12 && ARCS_BMP.every(l=>/^G02 /.test(l)), ARCS_BMP.filter(l=>!/^G02 /.test(l)));
+ok('位图链路孔位孔径与图元一致',
+   IR_BMP.holes.length === 2 && IR_BMP.holes.every(h=>Math.abs(h.d - 10) < 0.05)
+   && near(IR_BMP.holes[0].x, 25, 0.05) && near(IR_BMP.holes[1].x, 75, 0.05),
+   IR_BMP.holes);
+
+// --- 斜向引刀（不再从正上方垂直切入）---
+ok('起刀点取最长边中点（长度并列时取靠上的那条）',
+   JSON.stringify(M.dwgStartMid([[0,0],[50,0],[50,20],[0,20]])[0]) === '[25,20]',
+   M.dwgStartMid([[0,0],[50,0],[50,20],[0,20]])[0]);
+if(DEMO_IR.ok){
+  const L = M.irToNC(DEMO_IR.ir, DOPT).code.split('\n');
+  const iG = L.findIndex(l=>/^G41 D01 /.test(l));
+  const g = /^G41 D01 X(-?[\d.]+) Y(-?[\d.]+)/.exec(L[iG]);
+  let lead = null;
+  for(let i=iG;i>=0;i--){ const mm = /^G00 X(-?[\d.]+) Y(-?[\d.]+)/.exec(L[i]); if(mm){ lead = mm; break; } }
+  ok('起刀落在顶边中点 (50,80)', g && near(+g[1], 50, 1e-6) && near(+g[2], 80, 1e-6), g && [g[1], g[2]]);
+  ok('引刀点在零件外上方（不在轮廓线上）', lead && +lead[2] > 80 + 5, lead && [lead[1], lead[2]]);
+  const ang = lead ? Math.abs(Math.atan2(Math.abs(+g[2] - +lead[2]), Math.abs(+g[1] - +lead[1])) * 180/Math.PI) : 0;
+  ok('引刀角 ≈25°（斜向切入，不是垂直扎下去）', Math.abs(ang - 25) < 2, ang);
+  ok('引刀点到起刀点的距离 = 刀半径 + 余量',
+     lead && near(Math.hypot(+g[1] - +lead[1], +g[2] - +lead[2]), 7/Math.sin(M.LEAD_ANG), 0.02),
+     lead && Math.hypot(+g[1] - +lead[1], +g[2] - +lead[2]));
+  ok('G40 退刀回同一引刀点', lead && L.some(l=> new RegExp('^G40 X' + lead[1] + ' Y' + lead[2] + '$').test(l)));
 }
 
 // 文字演示案例：填表后各字段值正确
