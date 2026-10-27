@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.18.2";
+  const APP_VERSION = "1.18.3";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -947,7 +947,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.18.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.18.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -2700,22 +2700,27 @@ function initCloud(){
   return cloud;
 }
 
-const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。参数建议写成程序开头的括号注释；程序写到 M30 为止，M30 之后不要再输出任何文字。';
+const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)、G54 工件坐标系和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。参数建议写成程序开头的括号注释；程序写到 M30 为止，M30 之后不要再输出任何文字。';
 
 // 模型常在 M30 之后追加 Markdown 说明（# 开头的参数建议），机床不会执行这些行、校验器会报 W15。
 // 折叠成括号注释挪到 M30 之前：说明留得住，程序也干净。
+// 注意 M30 后面常带注释（`M30 (程序结束)`），正则必须容忍行尾注释，否则整段匹配不到。
 function aiFoldTail(text){
-  const re = /(^|\n)([ \t]*M30[ \t]*;?[ \t]*)(?=\n|$)/i;
+  const re = /(^|\n)([ \t]*M30[ \t]*(?:;[ \t]*)?(?:\([^)\n]*\)[ \t]*)?)(?=\n|$)/i;
   const m = re.exec(text);
   if(!m) return {text:text, folded:0};
   const head = text.slice(0, m.index + m[1].length);
   const tail = text.slice(m.index + m[0].length);
+  const m30 = m[2].trim();
   const lines = tail.split('\n').map(s=>s.trim()).filter(Boolean);
-  if(!lines.length) return {text:text, folded:0};
+  // 纸带结束符（FANUC 的 %、模型爱写的 end）直接删，不必折成注释
+  const junk = /^(%|end|ended|程序完|完毕)$/i;
+  const kept = lines.filter(s=>!junk.test(s));
+  if(!kept.length) return {text: head + m30, folded: 0};
   // 尾部若像程序段（G/M/O 开头）就不动它——那可能是另一段真程序，改成注释反而害人
-  if(lines.some(s=>/^[OGM]\s*-?\d/i.test(s.replace(/^#+\s*/, '')))) return {text:text, folded:0};
-  const cmt = lines.map(s=>'(' + s.replace(/^#+\s*/, '').replace(/[()]/g, ' ') + ')').join('\n');
-  return {text: head + cmt + '\n' + m[2].trim(), folded: lines.length};
+  if(kept.some(s=>/^[OGM]\s*-?\d/i.test(s.replace(/^#+\s*/, '')))) return {text:text, folded:0};
+  const cmt = kept.map(s=>'(' + s.replace(/^#+\s*/, '').replace(/[()]/g, ' ') + ')').join('\n');
+  return {text: head + cmt + '\n' + m30, folded: kept.length};
 }
 
 // 生成结果规范化：模型输出姿势不稳定，这里统一收拾成「能直接过校验器」的形状

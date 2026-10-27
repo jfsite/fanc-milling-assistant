@@ -1106,6 +1106,21 @@ ok('尾部像程序段（G/M/O 开头）时不折叠',
 ok('M30 后没有内容时原样返回', (()=>{ const r = M.aiFoldTail('O1;\nM30'); return r.folded === 0 && r.text === 'O1;\nM30'; })());
 ok('没有 M30 的程序原样返回', (()=>{ const r = M.aiFoldTail('G01 X10;'); return r.folded === 0; })());
 
+// M30 常带行尾注释（`M30 (程序结束)`），正则必须容忍，否则整段匹配不到、尾部 end 留在后面报 W15
+const M30C = 'O1;\nG21 G90;\nS1200 M03\nG01 X10 F200;\nM30 (程序结束)\nend';
+ok('M30 带行尾注释时仍能识别', M.aiFoldTail(M30C).text !== M30C, JSON.stringify(M.aiFoldTail(M30C).text));
+ok('M30 后的纸带结束符 end 被删掉', (()=>{ const t = M.aiFoldTail(M30C).text;
+  return !/\bend\b/i.test(t) && /M30 \(程序结束\)\s*$/.test(t); })(), M.aiFoldTail(M30C).text);
+ok('删掉 end 后不再报 W15',
+   M.lintProgram(M.aiFoldTail(M30C).text, {pitch:1.5, nmax:8000}).issues.filter(x=>x.rule==='W15').length === 0,
+   M.lintProgram(M.aiFoldTail(M30C).text, {pitch:1.5, nmax:8000}).issues.map(x=>x.rule));
+ok('M30 后的 % 纸带符也删掉',
+   !/%/.test(M.aiFoldTail('O1;\nM30\n%').text), M.aiFoldTail('O1;\nM30\n%').text);
+ok('M30 带注释 + 后面有说明 → 说明折成注释、注释保留',
+   (()=>{ const r = M.aiFoldTail('O1;\nG21 G90;\nM30 (结束)\n# 转速 S1200');
+     return r.folded === 1 && /\(转速 S1200\)\nM30 \(结束\)\s*$/.test(r.text); })(),
+   M.aiFoldTail('O1;\nG21 G90;\nM30 (结束)\n# 转速 S1200').text);
+
 // --- 23. 生成结果规范化（模型输出姿势不稳定，统一收拾）---
 ok('没有程序号时补 O0001',
    M.aiNormalize('(说明)\nG21 G90;\nM30').text.startsWith('O0001;'),
