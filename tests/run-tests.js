@@ -736,6 +736,15 @@ ok('文字演示按钮绑定 aiDemoFill',
    /btn-ai-demo1'\)\.onclick\s*=\s*\(\)\s*=>\s*aiDemoFill\(0\)/.test(js)
    && /btn-ai-demo2'\)\.onclick\s*=\s*\(\)\s*=>\s*aiDemoFill\(1\)/.test(js));
 
+// 位图演示：下载一张现画的 PNG，再由用户拖回上传区
+ok('面板有 PNG 演示按钮', /id="btn-dwg-demo-png"/.test(html));
+ok('PNG 演示按钮绑定 dwgDemoPng',
+   /getElementById\('btn-dwg-demo-png'\)/.test(js) && /\.onclick\s*=\s*dwgDemoPng/.test(js));
+ok('dwgDemoPng 导出 image/png 且文件名带 .png',
+   /toBlob\([\s\S]{0,600}?'image\/png'\)/.test(js) && /a\.download\s*=\s*'[^']*\.png'/.test(js));
+ok('上传区 accept 含 image/png（下载的图能直接选回来）',
+   /id="dwg-file"[^>]*accept="[^"]*image\/png/.test(html));
+
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
 process.exit(fail ? 1 : 0);
