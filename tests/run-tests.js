@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS, pathLabelPoints, coordText, fmtDur,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS, pathLabelPoints, coordText, fmtDur, aiPickModels, AI_MODEL_PREF, AI_MODEL_SKIP, aiFoldTail, aiNormalize,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -1047,8 +1047,89 @@ ok('开始出字后计时改到状态栏（不污染程序文本）',
    || /生成中 ' \+ fmtDur/.test(js));
 ok('等待超过 10 秒给出「还在跑」提示', /s >= 10/.test(js) && /停止生成/.test(js));
 ok('生成完成后状态栏显示用时与行数',
-   /'用时 ' \+ fmtDur\(Date\.now\(\) - t0\) \+ ' · ' \+ content\.split\('\\n'\)\.length \+ ' 行'/.test(js));
+   /'用时 ' \+ fmtDur\(Date\.now\(\) - t0\) \+ ' · ' \+ content\.split\('\\n'\)\.length \+ ' 行 · ' \+ usedModel/.test(js));
 ok('中止时状态栏显示已用时', /已停止 · 用时/.test(js));
+
+// --- 21. AI 选模型（生成速度）---
+// 实测：列表首项 `auto` 是路由模型，首字 >150s；deepseek-v4.1-flash 首字 1.4s、5.5s 出 50 行 0 错误
+const MODEL_LIST = [
+  { id:'auto' }, { id:'hy3' }, { id:'hy4-preview' }, { id:'glm-5.3' },
+  { id:'glm-5.3-flash' }, { id:'minimax-m3' }, { id:'kimi-k2-thinking' },
+  { id:'deepseek-v4-flash' }, { id:'deepseek-v4.1-flash' }, { id:'deepseek-v4-pro' },
+  { id:'hunyuan-image-alpha' }, { id:'kling-video-v3' }, { id:'step-5-preview' },
+  { id:'space-bunny' }, { id:'glm-5v-turbo' }, { id:'minimax-m3.1-flash' },
+];
+const PICK = M.aiPickModels(MODEL_LIST).map(m=>m.id);
+ok('选模型：第一选择是实测最快的 deepseek-v4.1-flash', PICK[0] === 'deepseek-v4.1-flash', PICK.slice(0,4));
+ok('选模型：auto（路由模型）排到最后', PICK[PICK.length-1] === 'auto', PICK[PICK.length-1]);
+ok('选模型：跳过视频/图像/思考/预览类模型',
+   !PICK.some(id=>/video|image|kling|thinking|preview/i.test(id)),
+   PICK.filter(id=>/video|image|kling|thinking|preview/i.test(id)));
+ok('选模型：flash 类整体排在非 flash 之前',
+   (()=>{ const f = PICK.filter(id=>/flash/i.test(id));
+     const lastFlash = Math.max(...f.map(id=>PICK.indexOf(id)));
+     const firstPlain = Math.min(...PICK.filter(id=>!/flash/i.test(id)).map(id=>PICK.indexOf(id)));
+     return f.length >= 3 && lastFlash < firstPlain; })(), PICK);
+ok('选模型：候选里至少 3 个可用（够回落重试）', PICK.length >= 3, PICK.length);
+ok('选模型：disabled 的模型被排除',
+   M.aiPickModels([{id:'deepseek-v4.1-flash', disabled:true}, {id:'deepseek-v4-flash'}]).map(m=>m.id).join() === 'deepseek-v4-flash');
+ok('选模型：空列表返回空数组（不抛异常）',
+   M.aiPickModels([]).length === 0 && M.aiPickModels(null).length === 0);
+ok('选模型：列表里只有 auto 时仍然可用',
+   M.aiPickModels([{id:'auto'}]).map(m=>m.id).join() === 'auto');
+
+ok('模型列表进面板就预取（省一次往返）',
+   /if\(p === 'ai'\) aiPrimeModels\(\)/.test(js));
+ok('生成时优先用预取的缓存，没有再拉',
+   /const models = aiModelCache \|\| await aiPrimeModels\(\)/.test(js));
+ok('首选模型失败自动换下一个（最多 2 个）',
+   /const tries = Math\.min\(2, cands\.length\)/.test(js) && /无响应，换 /.test(js));
+ok('用户点停止不会触发换模型重试',
+   /e\.name === 'AbortError'\) throw e/.test(js));
+
+// --- 22. M30 之后的说明折叠成注释 ---
+const TAIL_TXT = 'O0001;\nG21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nG01 X10 F200;\nM30\n\n# 参数说明：\n# 转速 S1800 r/min\n# 行距 8 mm';
+const FOLD = M.aiFoldTail(TAIL_TXT);
+ok('M30 后的 Markdown 说明被折叠', FOLD.folded === 3, FOLD.folded);
+ok('折叠后 M30 是最后一行', /\nM30\s*$/.test(FOLD.text), JSON.stringify(FOLD.text.slice(-40)));
+ok('折叠后的说明变成括号注释（一行一条）',
+   /^\(参数说明：\)$/m.test(FOLD.text) && /^\(转速 S1800 r\/min\)$/m.test(FOLD.text), FOLD.text);
+ok('折叠后不再有 # 开头的裸行', !/^#/m.test(FOLD.text), FOLD.text.split('\n').filter(s=>s.startsWith('#')));
+ok('折叠结果过校验器 0 警告（W15 消失）',
+   M.lintProgram(FOLD.text, {pitch:1.5, nmax:8000}).issues.filter(x=>x.rule==='W15').length === 0,
+   M.lintProgram(FOLD.text, {pitch:1.5, nmax:8000}).issues.map(x=>x.rule));
+ok('提示文字里的括号被清掉，不会破坏注释语法',
+   (()=>{ const r = M.aiFoldTail('O1;\nM30\n# 见 (图1) 说明');
+     return !/\(见 \(图1\)/.test(r.text); })());
+ok('尾部像程序段（G/M/O 开头）时不折叠',
+   M.aiFoldTail('O1;\nM30\nO2;\nG01 X10;').folded === 0);
+ok('M30 后没有内容时原样返回', (()=>{ const r = M.aiFoldTail('O1;\nM30'); return r.folded === 0 && r.text === 'O1;\nM30'; })());
+ok('没有 M30 的程序原样返回', (()=>{ const r = M.aiFoldTail('G01 X10;'); return r.folded === 0; })());
+
+// --- 23. 生成结果规范化（模型输出姿势不稳定，统一收拾）---
+ok('没有程序号时补 O0001',
+   M.aiNormalize('(说明)\nG21 G90;\nM30').text.startsWith('O0001;'),
+   M.aiNormalize('(说明)\nG21 G90;\nM30').text.split('\n')[0]);
+ok('程序号被注释挡在后面时提到首行，注释顺延',
+   (()=>{ const L = M.aiNormalize('(说明)\nO0002;\nG21 G90;\nM30').text.split('\n');
+     return L[0] === 'O0002;' && L[1] === '(说明)'; })(),
+   M.aiNormalize('(说明)\nO0002;\nG21 G90;\nM30').text.split('\n').slice(0,2));
+ok('剥掉 Markdown 代码围栏',
+   (()=>{ const r = M.aiNormalize('```gcode\nO0003;\nG21 G90;\nM30\n```');
+     return !/```/.test(r.text) && r.text.startsWith('O0003;') && /M30\s*$/.test(r.text); })(),
+   M.aiNormalize('```gcode\nO0003;\nG21 G90;\nM30\n```').text);
+ok('结尾重复的 M30 只留一个',
+   (()=>{ const r = M.aiNormalize('O1;\nG21 G90;\nM30\nM30\nM30');
+     return (r.text.match(/^M30/gm) || []).length === 1; })(),
+   M.aiNormalize('O1;\nG21 G90;\nM30\nM30\nM30').text);
+ok('规范化后过校验器 0 错误（无 O 号 + 重复 M30）',
+   M.lintProgram(M.aiNormalize('(说明)\nG21 G90;\nS1200 M03\nG01 X10 F200;\nM30\nM30').text,
+     {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv==='error').length === 0);
+ok('规范化内部接上了 M30 后的说明折叠',
+   M.aiNormalize('O1;\nG21 G90;\nM30\n# 参数：S1200').folded === 1);
+ok('生成结束时调用规范化并回写结果框',
+   /const norm = aiNormalize\(content\)/.test(js) && /content = norm\.text; resultEl\.textContent = content/.test(js));
+ok('状态栏会提示折叠了多少行说明', /行说明已折成注释/.test(js));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

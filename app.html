@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.18.1";
+  const APP_VERSION = "1.18.2";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -947,7 +947,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.18.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.18.2 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1986,12 +1986,18 @@ R 必须 ≥ 两点距离的一半。点「按基点生成轮廓」即合成 SVG
 
 **生成计时**：结果框里的「正在生成...」后面会跟着走秒（`正在生成... 7s`），超过 1 分钟变成 `1:05`。等满 10 秒还没出字会补一行提示「模型还没返回内容，可以继续等，也可以点「停止生成」」——课堂上最怕的是学生以为卡死了硬刷新，有了计时和这句提示就不会。
 
-首字到达后，计时移到按钮右侧的状态栏（`生成中 12s · 已输出 340 字`），这样**不会混进可复制的程序文本里**；生成结束后状态栏显示 `用时 13s · 45 行`。中止时显示 `已停止 · 用时 …`。
+首字到达后，计时移到按钮右侧的状态栏（`生成中 12s · 已输出 340 字`），这样**不会混进可复制的程序文本里**；生成结束后状态栏显示 `用时 3s · 42 行 · deepseek-v4.1-flash`（带上实际用的模型，出问题时能对上号）。中止时显示 `已停止 · 用时 …`。
+
+**生成速度**：正常是**首字 1 秒出头、3~5 秒出完整程序**。如果发现明显变慢（十几秒没出字），先看状态栏最后的模型名——早期版本随手取了云端模型列表的第一个（`auto` 路由模型），实测首字能卡到 150 秒以上，现在已改为按速度挑模型（见 11.4）。
 
 ### 11.4 技术说明
 
 - 走 WorkBuddy Cloud 的云端大模型，**页面不保存任何 API Key**，学生机不需要配置密钥。
 - 模型由云端动态下发，页面不写死模型 ID；位图识别优先挑 `supportsImages` 的模型。
+- **文字生成按速度挑模型**：云端列表有 30 多个模型，早期直接取第一个（`auto` 路由），实测首字 150 秒以上。现在排序规则是「已知快的 `deepseek-v4.1-flash` → 任意 `flash` → `turbo/mini/lite/fast` → 其余 → `auto` 垫底」，并跳过 `video / image / kling / thinking / preview` 这些非文本或明显慢的模型。名字只用来**排序**，不写死唯一答案——云端换模型时仍能挑到可用的。
+- 首选模型报错（限流/不可用）会**自动换下一个候选重试一次**，用户点了「停止生成」则不重试。
+- 进 AI 面板时就开始预取模型列表，点「生成程序」时省一次往返。
+- 生成结果会过一道**规范化**再显示：剥掉 Markdown 代码围栏、M30 之后追加的参数说明折成括号注释挪到 M30 之前（否则校验器报 W15「M30 之后仍有程序段」）、结尾重复的 M30 只留第一个、程序号不在第一行时提上来（没有就补 `O0001`）。所以模型输出姿势不稳也不影响拿去上机。
 - 文字方式的 System Prompt 内置安全约束：必须含初始化与 M30、刀补成对、换刀后 G43、对刀后先空运行。
 - **图纸方式的程序不是模型写的**：模型只负责把图认成轮廓 JSON，程序由本地生成器按 11.2.3 的规则拼装，因此语法与几何都可复现。
 
@@ -2331,6 +2337,7 @@ function switchPanel(p){
   document.getElementById('panel-'+p).classList.add('active');
   // 画布类面板一进去就先画一次：没有内容时也有居中的空状态提示，不是一块白板
   if(p === 'path') drawPath();
+  if(p === 'ai') aiPrimeModels();   // 进面板就预取模型列表，点「生成程序」时少一次往返
   if(p === 'batch') drawCompare();
 }
 const HEADER = 'G21 G90 G17 G40 G49 G80;\nG54 G00 X0 Y0;\nM06 T01;\nG43 H01 Z50 M03 S3000;';
@@ -2693,12 +2700,99 @@ function initCloud(){
   return cloud;
 }
 
-const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。';
+const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。参数建议写成程序开头的括号注释；程序写到 M30 为止，M30 之后不要再输出任何文字。';
+
+// 模型常在 M30 之后追加 Markdown 说明（# 开头的参数建议），机床不会执行这些行、校验器会报 W15。
+// 折叠成括号注释挪到 M30 之前：说明留得住，程序也干净。
+function aiFoldTail(text){
+  const re = /(^|\n)([ \t]*M30[ \t]*;?[ \t]*)(?=\n|$)/i;
+  const m = re.exec(text);
+  if(!m) return {text:text, folded:0};
+  const head = text.slice(0, m.index + m[1].length);
+  const tail = text.slice(m.index + m[0].length);
+  const lines = tail.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return {text:text, folded:0};
+  // 尾部若像程序段（G/M/O 开头）就不动它——那可能是另一段真程序，改成注释反而害人
+  if(lines.some(s=>/^[OGM]\s*-?\d/i.test(s.replace(/^#+\s*/, '')))) return {text:text, folded:0};
+  const cmt = lines.map(s=>'(' + s.replace(/^#+\s*/, '').replace(/[()]/g, ' ') + ')').join('\n');
+  return {text: head + cmt + '\n' + m[2].trim(), folded: lines.length};
+}
+
+// 生成结果规范化：模型输出姿势不稳定，这里统一收拾成「能直接过校验器」的形状
+// 1) 剥掉 Markdown 代码围栏  2) M30 后的说明折成注释  3) 结尾重复的 M30 只留第一个
+// 4) 第 1 行必须是程序号（注释挡在前面就把 O 号提上来，完全没有就补 O0001）
+function aiNormalize(raw){
+  let t = String(raw || '');
+  t = t.replace(/^\s*```[a-zA-Z]*[ \t]*\r?\n?/, '').replace(/\r?\n?```\s*$/, '');
+  const fold = aiFoldTail(t);
+  t = fold.text;
+  let lines = t.split('\n');
+  const m30 = lines.findIndex(s=>/^\s*M30\b/i.test(s));
+  if(m30 >= 0){
+    // M30 之后如果只剩重复的 M30，整段砍掉
+    const rest = lines.slice(m30 + 1).filter(s=>s.trim());
+    if(rest.every(s=>/^\s*M30\b/i.test(s))) lines = lines.slice(0, m30 + 1);
+  }
+  const isO = s=>/^\s*O\d+/i.test(s || '');
+  if(lines.length && !isO(lines[0])){
+    const k = lines.findIndex(isO);
+    if(k > 0){ const o = lines.splice(k, 1)[0]; lines.unshift(o.trim()); }
+    else lines.unshift('O0001;');
+  }
+  return {text: lines.join('\n').replace(/\s+$/, ''), folded: fold.folded};
+}
 
 // 生成计时用：60 秒内按秒，之后按 分:秒
 function fmtDur(ms){
   const s = Math.max(0, Math.floor(ms/1000));
   return s < 60 ? s + 's' : Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+// ===== 选模型：挑快的 =====
+// 模型列表由云端下发（实测 35 个）。列表第一个是 `auto` 路由模型——实测首字超过 150 秒，
+// 这就是"生成太慢"的根因。改为按「已知快的 → flash → turbo/mini/lite → 其余 → auto」排序。
+// 名字只用来排序，不写死唯一答案：云端调换模型时仍能选到一个可用的。
+const AI_MODEL_PREF = ['deepseek-v4.1-flash', 'deepseek-v4-flash', 'deepseek-v3-2-volc'];
+const AI_MODEL_SKIP = /video|image|kling|thinking|preview/i;   // 非文本 / 明显慢或试用的
+function aiPickModels(models){
+  const ok = (models || []).filter(m => m && m.disabled !== true && !AI_MODEL_SKIP.test(m.id));
+  const out = [];
+  const push = m => { if(m && out.indexOf(m) < 0) out.push(m); };
+  AI_MODEL_PREF.forEach(p => push(ok.find(m => m.id === p)));
+  ok.filter(m => /flash/i.test(m.id)).forEach(push);
+  ok.filter(m => /turbo|mini|lite|fast/i.test(m.id)).forEach(push);
+  ok.filter(m => m.id !== 'auto').forEach(push);
+  ok.filter(m => m.id === 'auto').forEach(push);
+  return out;
+}
+// 预取模型列表：切到 AI 面板时就开始拉，省掉点「生成程序」后的一次往返
+let aiModelCache = null;
+function aiPrimeModels(){
+  if(aiModelCache) return Promise.resolve(aiModelCache);
+  const c = initCloud();
+  if(!c) return Promise.resolve(null);
+  return c.llm.models.list().then(list=>{
+    aiModelCache = (list && list.length) ? list : null;
+    return aiModelCache;
+  }).catch(()=>null);
+}
+
+// 一个模型跑一遍，onChunk 收到累计文本
+async function aiStreamOnce(c, modelId, prompt, onChunk){
+  let content = '';
+  for await (const chunk of c.llm.chat.completions.create({
+    model: modelId,
+    messages: [
+      { role: 'system', content: AI_SYSTEM },
+      { role: 'user', content: prompt },
+    ],
+    stream: true,
+    signal: aiAbort.signal,
+  })){
+    const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+    if(delta && delta.content){ content += delta.content; onChunk(content); }
+  }
+  return content;
 }
 
 async function aiGenerate(){
@@ -2709,25 +2803,29 @@ async function aiGenerate(){
   const stopBtn = document.getElementById('btn-ai-stop');
   const genBtn = document.getElementById('btn-ai-generate');
   resultEl.style.display = 'block';
-  resultEl.textContent = '正在准备...';
-  statusEl.textContent = '';
   genBtn.disabled = true;
-  // 动态获取可用模型（空列表显式处理，不写死兜底）
-  let modelId;
+  // 模型列表：优先用预取的，没有再拉
+  let cands;
   try{
-    const models = await c.llm.models.list();
-    const usable = models.find(m => m.disabled !== true);
-    if(!models.length || !usable){
+    const models = aiModelCache || await aiPrimeModels();
+    if(!models || !models.length){
       resultEl.textContent = '当前没有可用的 AI 模型，请稍后再试或联系管理员。';
       genBtn.disabled = false;
       return;
     }
-    modelId = usable.id;
+    cands = aiPickModels(models);
+    if(!cands.length){
+      resultEl.textContent = '当前没有可用的 AI 模型，请稍后再试或联系管理员。';
+      genBtn.disabled = false;
+      return;
+    }
   }catch(e){
     resultEl.textContent = '获取模型列表失败，请稍后重试。';
     genBtn.disabled = false;
     return;
   }
+  resultEl.textContent = '正在生成...';
+  statusEl.textContent = '';
   const type = document.getElementById('ai-type').value;
   const material = document.getElementById('ai-material').value;
   const dia = document.getElementById('ai-d').value;
@@ -2737,6 +2835,7 @@ async function aiGenerate(){
   stopBtn.style.display = '';
   aiAbort = new AbortController();
   let content = '';
+  let usedModel = cands[0].id;
   // 自动计时：等首字时显示在结果框里（一眼看出还在跑），开始出字后移到状态栏，不污染可复制的程序
   const t0 = Date.now();
   const timer = setInterval(()=>{
@@ -2749,21 +2848,32 @@ async function aiGenerate(){
     }
   }, 500);
   try{
-    for await (const chunk of c.llm.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: AI_SYSTEM },
-        { role: 'user', content: prompt },
-      ],
-      stream: true,
-      signal: aiAbort.signal,
-    })){
-      const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
-      if(delta && delta.content){ content += delta.content; resultEl.textContent = content; }
+    // 首选模型出错（限流 / 不可用）就自动换下一个候选，不用老师手动重试
+    const tries = Math.min(2, cands.length);
+    let lastErr = null;
+    for(let i = 0; i < tries; i++){
+      try{
+        content = await aiStreamOnce(c, cands[i].id, prompt, txt=>{
+          content = txt;              // 必须同步给外层：计时器靠 content 判断该不该覆盖结果框
+          resultEl.textContent = txt;
+        });
+        usedModel = cands[i].id;
+        lastErr = null;
+        break;
+      }catch(e){
+        if(e && e.name === 'AbortError') throw e;   // 用户点了停止，不能当失败重试
+        lastErr = e;
+        content = '';
+        if(i + 1 < tries) statusEl.textContent = '模型 ' + cands[i].id + ' 无响应，换 ' + cands[i + 1].id + ' 重试…';
+      }
     }
+    if(lastErr) throw lastErr;
     if(content){
+      const norm = aiNormalize(content);
+      if(norm.text !== content){ content = norm.text; resultEl.textContent = content; }
       document.getElementById('ai-actions').style.display = 'flex';
-      statusEl.textContent = '用时 ' + fmtDur(Date.now() - t0) + ' · ' + content.split('\n').length + ' 行';
+      statusEl.textContent = '用时 ' + fmtDur(Date.now() - t0) + ' · ' + content.split('\n').length + ' 行 · ' + usedModel
+        + (norm.folded ? ' · ' + norm.folded + ' 行说明已折成注释' : '');
     }
   }catch(err){
     if(err && err.name === 'AbortError'){

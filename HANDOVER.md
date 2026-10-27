@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-27 22:00　｜　代码版本：v1.18.1（`app.html` 1.53 MB / 1,529,577 字节，11 个面板，419 项断言）　｜　**已发布上线 v1.18.0**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.0，见 §9.5）
+> 最后更新：2026-10-27 22:40　｜　代码版本：v1.18.2（`app.html` 1.53 MB / 1,536,263 字节，11 个面板，448 项断言）　｜　**已发布上线 v1.18.0**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.0，见 §9.5）
 
 ---
 
@@ -147,7 +147,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV，内置 4 份演示作业（满分 / 漏 G40 / 漏 D / 尺寸偏 5mm） | `runBatch()` `batchDemo()` `BATCH_DEMO_WORKS` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
 | 9 | 刀具库 | T 号 / 直径 / 刃数 / 补偿半径一处录入，参数计算·刀轨·图纸三处联动 | `toolNorm()` `toolListNorm()` `toolFindByD()` `toolSummary()` `renderToolLib()` |
-| 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序，SVG 一键演示 + PNG 示例图纸下载）+ 文字描述生成（两个演示案例填参） | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
+| 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序，SVG 一键演示 + PNG 示例图纸下载）+ 文字描述生成（按速度选模型、结果规范化） | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` `aiPickModels()` `aiNormalize()` |
 | 11 | 帮助 | 内嵌完整说明 + 目录 + 搜索 | `renderHelp()` + `tools/sync-doc.js` |
 
 跨面板能力：大屏模式 `togglePresent()`、本地自动保存 `autosave()` / `restoreAll()`、导出讲义 `exportHandout()`、刀具库统一取刀（`#c-toolpick` / `#p-toolpick` / `#dw-toolpick` 三个下拉）。
@@ -247,7 +247,7 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：419 项，0 失败。
+7. **测试全绿才算完成**：448 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
 10. **样式改动只动令牌与断点**：不要在 HTML 里追加新的内联颜色/圆角；确需特例（如截图脚本要用的尺寸）写进 `<style>` 并注释原因。
@@ -455,6 +455,8 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 | 闭合轮廓最后一段弧被截断 | 圆弧停在 (8.05, 79.81) 再补一条 `G01`：闭合是隐式的（`dwgDedupe` 删掉了与首点重合的尾点），拟合窗口取不到首点 | `dwgFitArcs(pts, tol, minPts, **closed**)` 传 `true`（`irToNC` 已按 `!open` 传）；末点已到起点时不再补零长度 `G01` |
 | 位图圆角镜像成凹角 | 图元合成 SVG 时 `sweep` 写成了 1，Y 翻转后每个圆弧被镜像，凸 R10 变成向内挖 3mm 的凹角 | 数学逆时针 + Y 翻转 = 屏幕顺时针，`sweep` 必须写 **0**；测试用 CCW/CW 两种输入的图元各验一遍四角圆心是否落在内侧 |
 | 垂直引刀过切一个月牙 | 从轮廓正上方垂直切入时，刀补建立段的终点被偏到「垂直走刀方向」的一侧，而垂直切入的垂直方向正好沿轮廓，等于在起点多切一个刀半径 | 外轮廓改成 25 度斜向引刀、起刀点取最长边中点；引刀点法向 R+2、切向再退 (R+2)/tan25 |
+| 生成慢到像卡死 | 云端模型列表第一个是 `auto` 路由模型，随手 `find(第一个可用)` 就选中它，实测首字 >150 秒（客户端 150s 超时都等不到第一字） | **绝不按列表顺序取模型**：按「已知快的 → flash → turbo/mini/lite → 其余 → auto 垫底」排序，并跳过 video/image/kling/thinking/preview；状态栏显示实际模型名便于对账 |
+| 计时器把生成内容盖回「正在生成...」 | 流式期间外层 `content` 要等 `await` 返回才赋值，500ms 一次的计时刷新读到空字符串就往结果框里写「正在生成...」，把已出的文字盖掉 | onChunk 回调里**同步累加外层变量**，计时器靠它判断该不该写结果框 |
 
 ---
 
