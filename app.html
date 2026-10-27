@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.18.0";
+  const APP_VERSION = "1.18.1";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -947,7 +947,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.18.0 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.18.1 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -1984,6 +1984,10 @@ R 必须 ≥ 两点距离的一半。点「按基点生成轮廓」即合成 SVG
 
 点「生成程序」→ 结果区**流式输出**（边生成边显示）→ 完成后可「载入编辑器」继续手改，或「解释这段程序」送去逐行翻译。生成过程中可点「停止生成」中止。
 
+**生成计时**：结果框里的「正在生成...」后面会跟着走秒（`正在生成... 7s`），超过 1 分钟变成 `1:05`。等满 10 秒还没出字会补一行提示「模型还没返回内容，可以继续等，也可以点「停止生成」」——课堂上最怕的是学生以为卡死了硬刷新，有了计时和这句提示就不会。
+
+首字到达后，计时移到按钮右侧的状态栏（`生成中 12s · 已输出 340 字`），这样**不会混进可复制的程序文本里**；生成结束后状态栏显示 `用时 13s · 45 行`。中止时显示 `已停止 · 用时 …`。
+
 ### 11.4 技术说明
 
 - 走 WorkBuddy Cloud 的云端大模型，**页面不保存任何 API Key**，学生机不需要配置密钥。
@@ -2691,6 +2695,12 @@ function initCloud(){
 
 const AI_SYSTEM = '你是数控铣削编程专家，精通 FANUC 0i 系统。根据用户的加工需求，输出规范、可运行的 FANUC 铣削程序。要求：程序带中文注释、每行一个功能、包含初始化(G21 G90 G17 G40 G49 G80)和结尾(M30)、给出合理的刀具/转速/进给参数建议。只输出程序代码和简要参数说明，不要多余解释。安全优先：刀补成对、换刀后 G43 长度补偿、对刀后先空运行。';
 
+// 生成计时用：60 秒内按秒，之后按 分:秒
+function fmtDur(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  return s < 60 ? s + 's' : Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0');
+}
+
 async function aiGenerate(){
   const c = initCloud();
   if(!c){ showNotice('云服务未就绪，请刷新页面重试'); return; }
@@ -2727,6 +2737,17 @@ async function aiGenerate(){
   stopBtn.style.display = '';
   aiAbort = new AbortController();
   let content = '';
+  // 自动计时：等首字时显示在结果框里（一眼看出还在跑），开始出字后移到状态栏，不污染可复制的程序
+  const t0 = Date.now();
+  const timer = setInterval(()=>{
+    if(content){
+      statusEl.textContent = '生成中 ' + fmtDur(Date.now() - t0) + ' · 已输出 ' + content.length + ' 字';
+    }else{
+      const s = Math.floor((Date.now() - t0) / 1000);
+      resultEl.textContent = '正在生成... ' + fmtDur(Date.now() - t0)
+        + (s >= 10 ? '\n\n（模型还没返回内容，可以继续等，也可以点「停止生成」）' : '');
+    }
+  }, 500);
   try{
     for await (const chunk of c.llm.chat.completions.create({
       model: modelId,
@@ -2742,10 +2763,12 @@ async function aiGenerate(){
     }
     if(content){
       document.getElementById('ai-actions').style.display = 'flex';
+      statusEl.textContent = '用时 ' + fmtDur(Date.now() - t0) + ' · ' + content.split('\n').length + ' 行';
     }
   }catch(err){
     if(err && err.name === 'AbortError'){
       resultEl.textContent = content || '（已停止生成）';
+      statusEl.textContent = content ? '已停止 · 用时 ' + fmtDur(Date.now() - t0) : '';
     }else{
       const code = err && err.error && err.error.code;
       let msg = '生成失败，请稍后重试';
@@ -2756,6 +2779,7 @@ async function aiGenerate(){
       statusEl.textContent = '';
     }
   }finally{
+    clearInterval(timer);
     genBtn.disabled = false;
     stopBtn.style.display = 'none';
     aiAbort = null;

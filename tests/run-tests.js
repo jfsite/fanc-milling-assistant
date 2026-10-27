@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS, pathLabelPoints, coordText,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS, pathLabelPoints, coordText, fmtDur,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -1029,6 +1029,26 @@ ok('起终点重合时合并为一个标记',
 ok('重合判定用几何距离而非对象引用', /same \? /.test(js) || /if\(same\)\{/.test(js));
 ok('标注受「标坐标」开关控制', /coordBox\.checked/.test(js)
    && /if\(\(!coordBox \|\| coordBox\.checked\) && lab\.pts\.length\)/.test(js));
+
+// --- 20. AI 生成时的自动计时 ---
+ok('计时格式化：60 秒内按秒', M.fmtDur(0) === '0s' && M.fmtDur(12000) === '12s' && M.fmtDur(59000) === '59s',
+   [M.fmtDur(0), M.fmtDur(12000), M.fmtDur(59000)]);
+ok('计时格式化：超过 1 分钟用 分:秒 并补零',
+   M.fmtDur(65000) === '1:05' && M.fmtDur(600000) === '10:00', [M.fmtDur(65000), M.fmtDur(600000)]);
+ok('计时格式化：负数按 0 处理', M.fmtDur(-5000) === '0s', M.fmtDur(-5000));
+
+// 计时器必须成对清理，否则停止后还在跑（会覆盖结果框）
+ok('计时器 setInterval 与 clearInterval 成对',
+   /const timer = setInterval/.test(js) && /clearInterval\(timer\)/.test(js));
+ok('等待首字时把计时写在结果框', /resultEl\.textContent = '正在生成\.\.\. ' \+ fmtDur/.test(js),
+   'requires 正在生成... + fmtDur');
+ok('开始出字后计时改到状态栏（不污染程序文本）',
+   /if\(content\)\{\s*statusEl\.textContent = '生成中 ' \+ fmtDur/.test(js)
+   || /生成中 ' \+ fmtDur/.test(js));
+ok('等待超过 10 秒给出「还在跑」提示', /s >= 10/.test(js) && /停止生成/.test(js));
+ok('生成完成后状态栏显示用时与行数',
+   /'用时 ' \+ fmtDur\(Date\.now\(\) - t0\) \+ ' · ' \+ content\.split\('\\n'\)\.length \+ ' 行'/.test(js));
+ok('中止时状态栏显示已用时', /已停止 · 用时/.test(js));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
