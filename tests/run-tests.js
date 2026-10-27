@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -872,7 +872,9 @@ ok('内/外轮廓刀补方向相反（外 CW+G41、内 CCW+G41）', (()=>{
 
 // --- 17. 快捷输入按钮组 ---
 ok('编辑器上有快捷输入按钮容器', /id="snippet-bar"/.test(html));
-ok('快捷输入共 12 项（含刀补取消）', M.SNIPPETS.length === 12, M.SNIPPETS.length);
+ok('快捷输入共 13 项（程序号 + 12 个代码段）', M.SNIPPETS.length === 13, M.SNIPPETS.length);
+ok('第一项是程序号', M.SNIPPETS[0].t === '程序号', M.SNIPPETS[0]);
+ok('程序号代码是 O__;', M.SNIPPETS[0].code === 'O__;', M.SNIPPETS[0].code);
 ok('快捷输入每项都有标题与代码', M.SNIPPETS.every(s=>s.t && s.code), M.SNIPPETS.map(s=>s.t));
 ok('快捷输入按钮绑定 snippetInsert', /\.onclick\s*=\s*\(\)\s*=>\s*snippetInsert/.test(js));
 
@@ -912,6 +914,43 @@ ok('光标后有内容时，插入片段与后文之间补换行',
 ok('多行片段无占位符时光标在片段末尾',
    (()=>{ const e2 = mkEd('O0001;', 6, 6); M.snippetInsert(e2, SNIP['程序结束']);
      return e2.sa === e2.value.indexOf('M30;') + 4 && e2.sa === e2.sb; })());
+
+// 程序号必须在第一行：光标在中间也不能插到中间
+const SNO = M.SNIPPETS[0];
+let ed5 = mkEd('G01 X10 Y20;', 5, 5);
+M.snippetInsert(ed5, SNO.code, SNO);
+ok('程序号顶到第一行（不受光标位置影响）', ed5.value === 'O__;\nG01 X10 Y20;', ed5.value);
+ok('程序号插入后选中 __', ed5.value.slice(ed5.sa, ed5.sb) === '__',
+   {sa: ed5.sa, sb: ed5.sb, got: ed5.value.slice(ed5.sa, ed5.sb)});
+let ed6 = mkEd('O0001;\nG21 G90;', 0, 0);
+M.snippetInsert(ed6, SNO.code, SNO);
+ok('已有程序号时替换而不是重复', ed6.value === 'O__;\nG21 G90;', ed6.value);
+let ed7 = mkEd('', 0, 0);
+M.snippetInsert(ed7, SNO.code, SNO);
+ok('空编辑器插入程序号', ed7.value === 'O__;', ed7.value);
+ok('只有程序号按钮是 atStart 语义',
+   M.SNIPPETS.filter(s=>s.atStart).length === 1, M.SNIPPETS.filter(s=>s.atStart).map(s=>s.t));
+
+// 插入程序头：第一行先带程序号
+ok('空编辑器插入程序头 → 首行 O0001', /^O0001;\nG21 G90 G17/.test(M.headerBlock('')), M.headerBlock(''));
+ok('程序头首行程序号后再跟 4 行标准初始化',
+   M.headerBlock('').split('\n').length === 5, M.headerBlock('').split('\n'));
+ok('首行已有程序号时不再重复加',
+   (M.headerBlock('O1234;\nG01 X10;').match(/O\d+;/g) || []).length === 0,
+   M.headerBlock('O1234;\nG01 X10;'));
+ok('已有 O 号时头部仍是 4 行标准初始化',
+   M.headerBlock('O1234;').split('\n').length === 4, M.headerBlock('O1234;').split('\n'));
+ok('首行是注释、程序号在第二行时仍会补程序号',
+   /^O0001;/.test(M.headerBlock('(示例零件)\nO1234;\nG01 X10;')),
+   M.headerBlock('(示例零件)\nO1234;\nG01 X10;'));
+ok('插入程序头绑定 headerBlock 并派发 input',
+   /btn-insert-header'\)\.onclick[\s\S]{0,400}headerBlock\(v\)/.test(js)
+   && /btn-insert-header'\)\.onclick[\s\S]{0,600}dispatchEvent\(new Event\('input'/.test(js));
+// 已有程序号时不能把程序头拼在最前面——那样 O 号会被挤到第 5 行，校验器直接报 E01
+ok('已有 O 号时程序头插在程序号之后（O 号仍在第 1 行）',
+   /if\(\/\^O\\d\+\/i\.test\(first\)\)\{[\s\S]{0,240}lines\.splice\(1,\s*0/.test(js));
+ok('headerBlock 对空值不补多余空行（尾部无空行）',
+   !/\n$/.test(M.headerBlock('')), JSON.stringify(M.headerBlock('')));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
