@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -951,6 +951,42 @@ ok('已有 O 号时程序头插在程序号之后（O 号仍在第 1 行）',
    /if\(\/\^O\\d\+\/i\.test\(first\)\)\{[\s\S]{0,240}lines\.splice\(1,\s*0/.test(js));
 ok('headerBlock 对空值不补多余空行（尾部无空行）',
    !/\n$/.test(M.headerBlock('')), JSON.stringify(M.headerBlock('')));
+
+// --- 18. 批量批改演示案例 ---
+ok('批量面板有演示按钮', /id="btn-batch-demo"/.test(html));
+ok('演示按钮绑定 batchDemo', /btn-batch-demo'\)\.onclick\s*=\s*batchDemo/.test(js));
+ok('演示作业 4 份', M.BATCH_DEMO_WORKS.length === 4, M.BATCH_DEMO_WORKS.length);
+ok('演示文本按 ==== 能切出 4 份',
+   M.splitBySep(M.BATCH_DEMO_WORKS.join('\n====\n')).length === 4);
+ok('标准答案本身 0 错误',
+   M.lintProgram(M.BATCH_DEMO_REF, {pitch:1.5, nmax:8000}).issues.filter(x=>x.lv==='error').length === 0);
+
+const BOPT = {toolR:6, rapid:20000};
+const BREF = M.buildPath(M.BATCH_DEMO_REF, BOPT);
+const BW = M.BATCH_DEMO_WORKS.map(t=>{
+  const lr = M.lintProgram(t, {pitch:1.5, nmax:8000});
+  const pr = M.buildPath(t, BOPT);
+  return {txt:t, lr, pr, e:lr.issues.filter(x=>x.lv==='error').length,
+          w:lr.issues.filter(x=>x.lv==='warn').length,
+          dev:M.maxDeviation(pr, BREF)};
+});
+ok('① 满分作业 0 错误 0 警告', BW[0].e === 0 && BW[0].w === 0, BW[0].lr.issues);
+ok('① 满分作业与标准答案偏差 0', BW[0].dev && BW[0].dev.max < 0.01, BW[0].dev);
+ok('② 忘取消刀补 → 检出 E03', BW[1].e === 1 && BW[1].lr.issues.some(x=>x.rule === 'E03'),
+   BW[1].lr.issues.map(x=>x.rule));
+ok('③ G41 漏 D → 检出 E06', BW[2].e === 1 && BW[2].lr.issues.some(x=>x.rule === 'E06'),
+   BW[2].lr.issues.map(x=>x.rule));
+// 第 4 份是演示的关键：语法全对，机器查不出错，但刀轨偏 5mm
+ok('④ 尺寸抄错作业语法上 0 错误', BW[3].e === 0 && BW[3].w === 0, BW[3].lr.issues);
+ok('④ 尺寸抄错作业刀轨偏差 5mm', BW[3].dev && Math.abs(BW[3].dev.max - 5) < 0.05, BW[3].dev);
+ok('④ 只有刀轨叠加能发现（校验器 0 问题但偏差 > 4.9）',
+   BW[3].e === 0 && BW[3].dev.max > 4.9);
+ok('四份作业都带程序号（不误报 E01）',
+   BW.every(r=>!r.lr.issues.some(x=>x.rule === 'E01')), BW.map(r=>r.lr.issues.map(x=>x.rule)));
+ok('四份作业带学生名字注释（张三/李四/王五/赵六）',
+   ['张三','李四','王五','赵六'].every((n,i)=>BW[i].txt.includes(n)),
+   BW.map(r=>r.txt.split('\n')[1]));
+ok('演示会选中第 4 份（刀轨叠加直接可见）', /batchSel = BATCH_DEMO_WORKS\.length - 1/.test(js));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

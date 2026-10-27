@@ -7,6 +7,8 @@
  *   node tools/shoot-panel.js help --out docs/img/panel-help.png
  *   node tools/shoot-panel.js ai --svg docs/samples/part-60x40.svg --gen
  *        # 先上传示例图纸并点「生成程序」，再截带结果的画面
+ *   node tools/shoot-panel.js batch --click '#btn-batch-demo'
+ *        # 点一下「试一试演示案例」，截带成绩表与刀轨对比的画面（可重复 --click，按顺序点）
  *
  * 流程：无头 Edge 打开本地 app.html → 点对应导航 → 全页截图 → Pillow 缩到 1000 宽 + 128 色量化
  * （与既有 11 张配图规格一致）。截图后记得跑 node tools/sync-doc.js --embed 写回应用。
@@ -34,6 +36,9 @@ const out = outIdx > -1 ? args[outIdx + 1] : path.join('docs', 'img', `panel-${p
 const svgIdx = args.indexOf('--svg');
 const svgPath = svgIdx > -1 ? path.resolve(args[svgIdx + 1]) : null;
 const doGen = args.includes('--gen');
+// 可重复 --click 选择器：切到面板后按顺序点，用来拍"带结果"的画面
+const clicks = [];
+for (let i = 0; i < args.length; i++) if (args[i] === '--click') clicks.push(args[i + 1]);
 
 (async () => {
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-shot-'));
@@ -111,6 +116,15 @@ const doGen = args.includes('--gen');
       }
     }
     await sleep(300);
+    for (const sel of clicks) {
+      const r = await send('Runtime.evaluate', {
+        expression: `(()=>{const el=document.querySelector(${JSON.stringify(sel)}); if(!el) return 'no'; el.click(); return 'ok';})()`,
+        returnByValue: true,
+      });
+      if (r.result?.result?.value !== 'ok') throw new Error('--click 找不到 ' + sel);
+      // 等批改 / 画布算完，也等顶部 toast 自己消失（否则会压住页头标题）
+      await sleep(2400);
+    }
     // 长图截图前回到顶部，并把吸顶导航临时改成静态：sticky + captureBeyondViewport
     // 会把导航按滚动位置画在页面中间、并让当前项错位（实测偏移 20px 左右）
     await send('Runtime.evaluate', {

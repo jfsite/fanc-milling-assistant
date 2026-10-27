@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-27 20:12　｜　代码版本：v1.16.1（`app.html` 1.51 MB / 1,508,979 字节，11 个面板，379 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
+> 最后更新：2026-10-27 20:30　｜　代码版本：v1.17.0（`app.html` 1.52 MB / 1,522,051 字节，11 个面板，394 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
 
 ---
 
@@ -144,7 +144,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 4 | 程序解释 | 逐行翻译，地址字按上下文释义，宏语句单列 | `tokenize()` `describeAddr()` `explainMacro()` `runExplain()` |
 | 5 | 程序校验 | 43 条规则（21 E / 16 W / 6 I）+ 宏程序试算器 | `lintProgram()` `RULE_DOC` `issuesHtml()` `runMacro()` |
 | 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `contourBBox()` `checkDims()` |
-| 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV | `runBatch()` `maxDeviation()` `drawCompare()` `exportCSV()` |
+| 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV，内置 4 份演示作业（满分 / 漏 G40 / 漏 D / 尺寸偏 5mm） | `runBatch()` `batchDemo()` `BATCH_DEMO_WORKS` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
 | 9 | 刀具库 | T 号 / 直径 / 刃数 / 补偿半径一处录入，参数计算·刀轨·图纸三处联动 | `toolNorm()` `toolListNorm()` `toolFindByD()` `toolSummary()` `renderToolLib()` |
 | 10 | AI 智能编程 | 图纸生成（SVG 解析 / 位图识别 → 轮廓 → 程序，SVG 一键演示 + PNG 示例图纸下载）+ 文字描述生成（两个演示案例填参） | `parseSvgIR()` `irToNC()` `dwgCheck()` `initCloud()` `aiGenerate()` |
@@ -231,7 +231,7 @@ node tools/release.js                                  # 3. 快照 + tag
 6. **按钮与输入统一 40px 高**（手机 44px），新增控件跟着走，不要自带 padding。
 7. **`.notice` 是全局固定 toast**（顶部居中，2s 消失），页面里只有这一个元素，不要挪进卡片。
 8. **标题图标是代码注入的**：`decorateHeadings()` 按 `HICO_RULES` 里的正则给 `.card h2/h3` 插内联 SVG（23 个字形，`stroke` 走 `currentColor`，禁止引图标库/CDN）。新增标题时确认关键词能命中，否则会退回 `dot`；动态插入的卡片由 `MutationObserver`（40ms 防抖）自动补。h2 带浅底方块 28px/圆角 9，h3 无底 16px。
-8. **改完样式必须重拍配图**：`node tools/reshoot-docs.js` 一次拍完带数据的 11 张；单张用 `node tools/shoot-panel.js <panel>`。
+8. **改完样式必须重拍配图**：`node tools/reshoot-docs.js` 一次拍完带数据的 11 张；单张用 `node tools/shoot-panel.js <panel>`；要拍"跑出结果"的画面加 `--click <选择器>`（可重复）。
    `docs/img/gaps-real.png` 是真实识别结果，不重拍。
 9. **长图截图前必须 `window.scrollTo(0,0)`**：导航是 `position:sticky`，`captureBeyondViewport` 会把它按当前滚动位置画在长图中间（AI 那张就这样翻过车）。两个截图脚本已内置。
 
@@ -247,7 +247,7 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：379 项，0 失败。
+7. **测试全绿才算完成**：394 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
 10. **样式改动只动令牌与断点**：不要在 HTML 里追加新的内联颜色/圆角；确需特例（如截图脚本要用的尺寸）写进 `<style>` 并注释原因。
