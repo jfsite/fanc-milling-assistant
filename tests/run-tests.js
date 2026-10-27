@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -869,6 +869,49 @@ ok('内/外轮廓刀补方向相反（外 CW+G41、内 CCW+G41）', (()=>{
   const inSeq = [[50,20],[80,20],[80,60],[20,60],[20,20]];
   return shoelace(outSeq) < 0 && shoelace(inSeq) > 0 && /G41/.test(TPL_OUT) && /G41/.test(TPL_IN);
 })());
+
+// --- 17. 快捷输入按钮组 ---
+ok('编辑器上有快捷输入按钮容器', /id="snippet-bar"/.test(html));
+ok('快捷输入共 12 项（含刀补取消）', M.SNIPPETS.length === 12, M.SNIPPETS.length);
+ok('快捷输入每项都有标题与代码', M.SNIPPETS.every(s=>s.t && s.code), M.SNIPPETS.map(s=>s.t));
+ok('快捷输入按钮绑定 snippetInsert', /\.onclick\s*=\s*\(\)\s*=>\s*snippetInsert/.test(js));
+
+// 关键片段内容
+const SNIP = {}; M.SNIPPETS.forEach(s=>{ SNIP[s.t] = s.code; });
+ok('程序头含标准初始化', /G21 G90 G17 G40 G49 G80/.test(SNIP['程序头'] || ''));
+ok('直线是 G01 模态', /^G01 /.test(SNIP['直线'] || ''));
+ok('顺圆弧R 用 G02 + R', /^G02 .* R__/.test(SNIP['顺圆弧R'] || ''));
+ok('逆圆弧R 用 G03 + R', /^G03 .* R__/.test(SNIP['逆圆弧R'] || ''));
+ok('顺圆弧IJK 用 G02 + I/J', /^G02 .* I__ J__/.test(SNIP['顺圆弧IJK'] || ''));
+ok('刀补建立是 G41 + D', /^G41 D__/.test(SNIP['刀补建立'] || ''));
+ok('刀补取消是 G40', /^G40 /.test(SNIP['刀补取消'] || ''));
+ok('长度补偿是 G43 + H + Z50', /^G43 H__ Z50/.test(SNIP['长度补偿'] || ''));
+ok('钻孔循环是 G81 + Z- + R2', /^G81 .* Z-__ R2/.test(SNIP['钻孔循环'] || ''));
+ok('攻丝是 G84', /^G84 /.test(SNIP['攻丝'] || ''));
+ok('子程序调用是 M98 + P + L', /^M98 P__ L__/.test(SNIP['子程序调用'] || ''));
+ok('程序结束含 M30', /M30;/.test(SNIP['程序结束'] || ''));
+
+// snippetInsert 行为：光标处插入、自成一行、选中第一个占位符
+function mkEd(v, s, e){ return { value:v, selectionStart:s, selectionEnd:e, sa:0, sb:0,
+  focus(){}, setSelectionRange(a,b){ this.sa=a; this.sb=b; }, dispatchEvent(){} }; }
+let ed1 = mkEd('G21 G90;', 9, 9);
+M.snippetInsert(ed1, SNIP['直线']);
+ok('光标处插入且自成一行', ed1.value === 'G21 G90;\nG01 X__ Y__ F__;', ed1.value);
+ok('选中第一个占位符（__）', ed1.value.slice(ed1.sa, ed1.sb) === '__',
+   {sa: ed1.sa, sb: ed1.sb, got: ed1.value.slice(ed1.sa, ed1.sb)});
+let ed2 = mkEd('G21 G90;\n', 9, 9);
+M.snippetInsert(ed2, SNIP['直线']);
+ok('行首插入不再多补换行', ed2.value === 'G21 G90;\nG01 X__ Y__ F__;', ed2.value);
+let ed3 = mkEd('', 0, 0);
+M.snippetInsert(ed3, SNIP['程序头']);
+ok('空编辑器直接插入程序头', /^G21 G90 G17/.test(ed3.value));
+let ed4 = mkEd('G01 X10;\nG01 X20;', 8, 8);
+M.snippetInsert(ed4, SNIP['程序结束']);
+ok('光标后有内容时，插入片段与后文之间补换行',
+   ed4.value === 'G01 X10;\nG00 Z50;\nM05;\nM09;\nG91 G28 Z0;\nM30;\nG01 X20;', ed4.value);
+ok('多行片段无占位符时光标在片段末尾',
+   (()=>{ const e2 = mkEd('O0001;', 6, 6); M.snippetInsert(e2, SNIP['程序结束']);
+     return e2.sa === e2.value.indexOf('M30;') + 4 && e2.sa === e2.sb; })());
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');
