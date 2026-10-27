@@ -42,7 +42,7 @@ global.navigator = {};
 const modPath = path.join(os.tmpdir(), 'fanuc-w-mod-' + process.pid + '.js');
 fs.writeFileSync(modPath,
   js + '\nmodule.exports = {mEval, lintProgram, runMacro, runExplain, renderLint, renderMacro,'
-     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS,'
+     + ' tokenize, gname, mname, describeAddr, explainMacro, TEMPLATES, SNIPPETS, snippetInsert, headerBlock, BATCH_DEMO_REF, BATCH_DEMO_WORKS, pathLabelPoints, coordText,'
      + ' buildPath, arcCenterByR, arcSweep, segPoints, compRuns, splitBySep, maxDeviation,'
      + ' issuesHtml, RULE_DOC, niceStep, fmtTime, distToSeg, measuredDims, contourBBox, makeTrain, MUTATIONS,'
      + ' parseSvgIR, irToNC, dwgCheck, dwgExtractJson, dwgArea, dwgPathPolys, checkUpdate,'
@@ -987,6 +987,48 @@ ok('四份作业带学生名字注释（张三/李四/王五/赵六）',
    ['张三','李四','王五','赵六'].every((n,i)=>BW[i].txt.includes(n)),
    BW.map(r=>r.txt.split('\n')[1]));
 ok('演示会选中第 4 份（刀轨叠加直接可见）', /batchSel = BATCH_DEMO_WORKS\.length - 1/.test(js));
+
+// --- 19. 刀轨图起终点与坐标标注 ---
+ok('刀轨面板有「标坐标」开关', /id="p-showcoord"[^>]*checked/.test(html));
+ok('标注逻辑抽成纯函数 pathLabelPoints', /function pathLabelPoints\(segs\)/.test(js));
+
+const LABP = M.buildPath('O1;\nG21 G90;\nG54 G00 X-30 Y-30;\nG01 Z-5 F100;\n'
+  + 'G01 X-20 Y-10 F300;\nG01 X-20 Y10;\nG01 X20 Y10;\nG01 X20 Y-10;\nG01 X-20 Y-10;\nG00 Z50;\nM30;', {toolR:0});
+const LAB = M.pathLabelPoints(LABP.segs);
+ok('切削起点 = 第一条切削段的起点（不是 G00 定位点）',
+   LAB.start && Math.abs(LAB.start[0] + 30) < 1e-6 && Math.abs(LAB.start[1] + 30) < 1e-6, LAB.start);
+ok('切削终点 = 最后一条切削段的终点',
+   LAB.end && Math.abs(LAB.end[0] + 20) < 1e-6 && Math.abs(LAB.end[1] + 10) < 1e-6, LAB.end);
+ok('矩形轮廓共 5 个标注点（闭合处不重复标）', LAB.pts.length === 5,
+   LAB.pts.map(p=>[p.x, p.y]));
+ok('快移段（G00 定位）不参与标注',
+   LAB.pts.every(p=>!(Math.abs(p.x) < 1e-6 && Math.abs(p.y) < 1e-6)),
+   LAB.pts.map(p=>[p.x, p.y]));
+ok('同一坐标只标一次（分层铣多层 XY 相同不会叠成一团）',
+   (()=>{ const lay = M.buildPath('O2;\nG21 G90;\nG54 G00 X0 Y0;\n'
+     + 'G01 Z-2 F200;\nG01 X10 Y0;\nG01 Y10;\nG01 X0;\nG01 Y0;\n'
+     + 'G01 Z-4 F200;\nG01 X10 Y0;\nG01 Y10;\nG01 X0;\nG01 Y0;\nM30;', {toolR:0});
+     // 两层轮廓的 XY 完全相同 → 去重后仍是 4 个角点
+     return M.pathLabelPoints(lay.segs).pts.length === 4; })());
+ok('只有快移段时不报错，起点终点取首末段',
+   (()=>{ const r = M.pathLabelPoints([{kind:'line', x0:0, y0:0, x1:5, y1:5, rapid:true}]);
+     return r.start[0] === 0 && r.end[0] === 5 && r.pts.length === 2; })());
+ok('空段返回空标注', (()=>{ const r = M.pathLabelPoints([]);
+   return r.start === null && r.end === null && r.pts.length === 0; })());
+
+ok('坐标文字整数不写小数', M.coordText(-20, 10) === 'X-20 Y10', M.coordText(-20, 10));
+ok('坐标文字非整数留 2 位', M.coordText(3.25, -1.5) === 'X3.25 Y-1.5', M.coordText(3.25, -1.5));
+ok('坐标文字吸附浮点误差（3.0000001 → 3）', M.coordText(3.0000001, 0.004) === 'X3 Y0',
+   M.coordText(3.0000001, 0.004));
+ok('起点绿点、终点红点有对应画法',
+   /drawPathMarker\(ctx, view, lab\.start, '#16a34a', '起点'/.test(js)
+   && /drawPathMarker\(ctx, view, lab\.end, '#dc2626', '终点'/.test(js));
+// 闭合加工常回到引刀点，起终点同坐标时必须合并，否则两个圆两行字叠在一起
+ok('起终点重合时合并为一个标记',
+   /const same = Math\.hypot\(lab\.start\[0\]-lab\.end\[0\]/.test(js) && /'起点\/终点'/.test(js));
+ok('重合判定用几何距离而非对象引用', /same \? /.test(js) || /if\(same\)\{/.test(js));
+ok('标注受「标坐标」开关控制', /coordBox\.checked/.test(js)
+   && /if\(\(!coordBox \|\| coordBox\.checked\) && lab\.pts\.length\)/.test(js));
 
 fs.unlinkSync(modPath);
 console.log('\n===== ' + pass + ' passed, ' + fail + ' failed =====');

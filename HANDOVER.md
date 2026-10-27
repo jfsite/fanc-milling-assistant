@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-27 20:30　｜　代码版本：v1.17.0（`app.html` 1.52 MB / 1,522,051 字节，11 个面板，394 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
+> 最后更新：2026-10-27 21:05　｜　代码版本：v1.18.0（`app.html` 1.53 MB / 1,527,907 字节，11 个面板，410 项断言）　｜　**已发布上线 v1.12.2**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.12.2，见 §9.5）
 
 ---
 
@@ -143,7 +143,7 @@ node tools/release.js                                  # 3. 快照 + tag
 | 3 | 参数计算 | n / F / Q / Pc / Pm，材料联动，超转速折算 | `MATERIALS` `doCalc()` `calcSyncVc()` |
 | 4 | 程序解释 | 逐行翻译，地址字按上下文释义，宏语句单列 | `tokenize()` `describeAddr()` `explainMacro()` `runExplain()` |
 | 5 | 程序校验 | 43 条规则（21 E / 16 W / 6 I）+ 宏程序试算器 | `lintProgram()` `RULE_DOC` `issuesHtml()` `runMacro()` |
-| 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `contourBBox()` `checkDims()` |
+| 6 | 刀轨演示 | 2D 轨迹、分步、刀补偏置、起终点与折点坐标标注、代码双向联动、尺寸核对 | `buildPath()` `drawPath()` `setCur()` `pathLabelPoints()` `coordText()` `contourBBox()` `checkDims()` |
 | 7 | 批量批改 | 多份打分、问题清单、刀轨对比、CSV，内置 4 份演示作业（满分 / 漏 G40 / 漏 D / 尺寸偏 5mm） | `runBatch()` `batchDemo()` `BATCH_DEMO_WORKS` `maxDeviation()` `drawCompare()` `exportCSV()` |
 | 8 | 找错练习 | 10 种变异自动注入 + 交卷对答案 | `MUTATIONS` `makeTrain()` `showTrainAnswer()` |
 | 9 | 刀具库 | T 号 / 直径 / 刃数 / 补偿半径一处录入，参数计算·刀轨·图纸三处联动 | `toolNorm()` `toolListNorm()` `toolFindByD()` `toolSummary()` `renderToolLib()` |
@@ -247,7 +247,7 @@ node tools/release.js                                  # 3. 快照 + tag
 4. **片段模式**：无 O 号且无 M30 时按指令片段校验（I06），不报头尾结构错误。
 5. **子程序抑制**：进入子程序定义后不做 W04「主轴未启动」检查，否则模板会误报。
 6. **找错练习的变异必须能被校验器检出**——测试逐条验证，新增变异时在 `tests/run-tests.js` 里补断言。
-7. **测试全绿才算完成**：394 项，0 失败。
+7. **测试全绿才算完成**：410 项，0 失败。
 8. **不引入外部依赖**（AI 模块的 CDN SDK 除外），保持单文件可拷贝。
 9. **刀具参数只有一处真相**：直径 / 刃数 / 补偿半径都存在刀具库，参数计算、刀轨、图纸只通过下拉取值，不再各自维护一套默认值。
 10. **样式改动只动令牌与断点**：不要在 HTML 里追加新的内联颜色/圆角；确需特例（如截图脚本要用的尺寸）写进 `<style>` 并注释原因。

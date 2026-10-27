@@ -19,6 +19,10 @@ const PY = 'C:\\Users\\wzp\\.workbuddy\\binaries\\python\\versions\\3.13.12\\pyt
 const PORT = 9300 + Math.floor(Math.random() * 250);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// node tools/reshoot-docs.js --only path   → 只重拍 docs/img/panel-path.png
+const OI = process.argv.indexOf('--only');
+const ONLY = OI > -1 ? process.argv[OI + 1] : null;
+
 const GOOD = `O0002;
 G21 G90 G17 G40 G49 G80;
 G54 G00 X0 Y0;
@@ -94,6 +98,7 @@ print('saved %s %s' % (dst, Image.open(dst).size))
 `, raw, dst], { encoding: 'utf8' });
 
   const shot = async (name, clip) => {
+    if (ONLY && name !== ONLY) return;   // --only <panel>：只落盘指定那张
     await ev("document.activeElement && document.activeElement.blur()");
     // sticky 导航在长图截图里会错位：截图期间改成 static
     await ev("window.scrollTo(0,0); var n=document.getElementById('nav'); if(n) n.style.position='static';");
@@ -156,7 +161,9 @@ print('saved %s %s' % (dst, Image.open(dst).size))
   await ev(`(${setVal})('path-input',${JSON.stringify(GOOD)})`);
   await js(`document.getElementById('btn-path').click()`);
   await sleep(700);
-  await js(`(()=>{const rows=document.querySelectorAll('.code-row'); if(rows[10]) rows[10].click();})()`);
+  // 走完到最后一段：全部轨迹都是已执行状态（选中间段会把大半轨迹灰化，配图看不清标注）
+  await js(`document.getElementById('btn-pv-last').click()`);
+  await sleep(400);
   await shot('path');
 
   // 图 7 · 尺寸核对：填图纸尺寸 → 核对 → 只截这张卡
@@ -172,12 +179,8 @@ print('saved %s %s' % (dst, Image.open(dst).size))
 
   // 图 8 · 批量批改：两份作业 + 标准答案 → 点第一行
   await nav('batch');
-  await ev(`(${setVal})('b-input',${JSON.stringify(STUDENT + '\n====\n' + BAD)})`);
-  await ev(`(${setVal})('b-ref',${JSON.stringify(GOOD)})`);
-  await js(`document.getElementById('btn-batch').click()`);
-  await sleep(900);
-  await js(`(()=>{const tr=document.querySelector('#batch-result tbody tr'); if(tr) tr.click();})()`);
-  await sleep(600);
+  await js(`document.getElementById('btn-batch-demo').click()`);   // 内置 4 份演示作业
+  await sleep(2600);                                                // 等 toast 消失，否则压住页头
   await shot('batch');
 
   // 图 9 · 找错练习：生成病灶 → 交卷
