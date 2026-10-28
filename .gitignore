@@ -7,3 +7,6 @@ Thumbs.db
 
 # WorkBuddy 本地会话数据（应用登记 / 记忆），不入库
 .workbuddy/
+
+# 临时对比/调试产物（底色候选截图等），不入库
+tmp/

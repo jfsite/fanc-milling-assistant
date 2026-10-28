@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script>
   // 版本号唯一数据源：只改这一处，其余位置由 renderVersion() 与 tools/version.js 同步
-  const APP_VERSION = "1.18.3";
+  const APP_VERSION = "1.18.4";
   const __CLOUD_CONFIG__ = {
     endpoint: "https://fanuc-milling-w.app.workbuddy.host",
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
@@ -29,7 +29,7 @@
     --warn:#b45309; --warn-bg:#fdf6ec; --warn-line:#f0d6a4;
     --danger:#b42318; --danger-bg:#fdeceb; --danger-line:#f5c6c6;
     /* 中性色：底色近白，靠阴影而不是描边分层 */
-    --bg:#fafafb; --card:#ffffff; --card-sub:#f7f7fa;
+    --bg:#f2f4f7; --card:#ffffff; --card-sub:#f7f7fa;
     --line:#ececf1; --line2:#dedee7;
     --txt:#15151f; --txt-2:#3d3d4c; --sub:#6b6b7b; --faint:#a0a0ae;
     /* 代码块：带一点紫调的黑 */
@@ -947,7 +947,7 @@
 <script type="text/markdown" id="help-md">
 # FANUC 铣削编程助手（W版）· 模块详细说明
 
-> 版本 v1.18.3 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
+> 版本 v1.18.4 ｜ 形态：单文件 HTML（`app.html`），零依赖、无需联网即可用（AI 生成模块除外）
 > 适用：FANUC 0i 系统立式加工中心铣削编程教学
 > 配套教材：《数控铣削编程与加工（FANUC系统）》朱勤惠、沈建峰主编，机械工业出版社
 
@@ -4426,6 +4426,8 @@ document.getElementById('btn-path').onclick = genPath;
 document.getElementById('btn-path-export').onclick = exportHandout;
 document.getElementById('p-showcomp').onchange = drawPath;
 document.getElementById('p-showrapid').onchange = drawPath;
+// 标坐标同样只影响绘制，勾选即刻重画（v1.18.0 加开关时漏了这一行，要重新点「生成刀轨」才生效）
+document.getElementById('p-showcoord').onchange = drawPath;
 document.getElementById('btn-pv-first').onclick = ()=>{ stopPlay(); setCur(0); };
 document.getElementById('btn-pv-last').onclick = ()=>{ stopPlay(); setCur((pathView.res ? pathView.res.segs.length : 1)-1); };
 document.getElementById('btn-pv-prev').onclick = ()=>{ stopPlay(); setCur((pathView.cur < 0 ? (pathView.res ? pathView.res.segs.length : 1) : pathView.cur) - 1); };

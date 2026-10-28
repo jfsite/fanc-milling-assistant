@@ -2,7 +2,7 @@
 
 > 给「新工作区 / 新任务」读的。看完这一份 + `docs/history/` 就能接上，不需要翻旧对话。
 >
-> 最后更新：2026-10-27 22:52　｜　代码版本：v1.18.3（`app.html` 1.53 MB / 1,536,645 字节，11 个面板，453 项断言）　｜　**已发布上线 v1.18.3**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.3，见 §9.5）
+> 最后更新：2026-10-27 22:52　｜　代码版本：v1.18.4（`app.html` 1.53 MB / 1,536,645 字节，11 个面板，453 项断言）　｜　**已发布上线 v1.18.3**（见 §6）　｜　**已托管 GitHub 私有仓库**（标签到 v1.18.3，见 §9.5）
 
 ---
 
@@ -35,7 +35,7 @@
 - **不要整读 `app.html`**：已 1.3 MB，整读一次约 40 万字符，直接吃掉小半上下文。
   用 `grep -n "function xxx"` 定位、再 `sed -n "起,止p"` 局部读。
 - 先读本文件 + `.workbuddy/memory/` 最近一天，再动代码；不要翻旧对话。
-- 改完必跑 `node tests/run-tests.js`（249 项，0 失败才算完成）。
+- 改完必跑两道闸门：`node tests/run-tests.js`（**453 项**纯函数断言）+ `node tools/smoke-modules.js`（**137 项**真实浏览器全模块冒烟），都 0 失败才算完成。
 - **一次会话只做一个主题**；收尾时更新本文件对应小节 + 当天 memory。主题混着做，上下文会比代码更快爆。
 
 ## 2. 常用命令
@@ -44,8 +44,12 @@
 # 本地预览（改完刷新即可）
 python -m http.server 8765 --bind 127.0.0.1
 
-# 回归测试：277 项断言，必须 0 失败才算完成
+# 回归测试：453 项纯函数断言，必须 0 失败才算完成
 node tests/run-tests.js
+
+# 全模块端到端冒烟：11 个面板 + 图纸链路 + 坏数据/大程序/快速切面板，137 项
+# 会抓控制台异常、查横向溢出、验自动保存，任何一项失败退出码 2
+node tools/smoke-modules.js
 
 # 改完文档 / 换完截图后，把内容写回 app.html 的帮助面板
 node tools/sync-doc.js --embed
@@ -216,7 +220,8 @@ node tools/release.js                                  # 3. 快照 + tag
 样式集中在 `app.html` 的**第一个 `<style>`**，约 470 行，分「设计令牌 → 基础 → 布局 → 卡片 → 表单 → 按钮 → 表格 → 小元件 → 深色代码块 → 画布 → 帮助 → 图纸 → 版本条 → 大屏 → 响应式」十四段。
 
 1. **只用令牌，不散写颜色**：`--brand / --brand-bg / --line / --line2 / --sub / --txt / --danger / --warn / --accent / --mono` 等旧名**必须保留**——HTML 里大量内联样式（`style="...var(--line)"`）和画布图例直接引用它们。
-   当前是 **方案 C 靛紫**：`--brand #4f46e5 / --brand-strong #4338ca / --brand-bg #eef0fe / --accent #0f766e / --bg #fafafb / 代码块 #101322`；版心 `948px` 单列。
+   当前是 **方案 C 靛紫**：`--brand #4f46e5 / --brand-strong #4338ca / --brand-bg #eef0fe / --accent #0f766e / --bg #f2f4f7 / 代码块 #101322`；版心 `948px` 单列。
+   底色 v1.18.4 从 `#fafafb` 改成中性灰 `#f2f4f7`（原来的近白底色与白卡片太接近，整屏发糊）；换底色前可跑 `node tools/shoot-bg-variants.js` 出 6 个候选并排图，改 `VARIANTS` 数组即可加/换候选。
 2. **画布颜色不在 CSS 里**（改色必须五处一起改，否则图例和线条对不上）：
    | 元素 | 值 | 出现位置 |
    |---|---|---|
@@ -477,7 +482,7 @@ fanc-milling-app/
 │  ├─ samples/           图纸示例（part-60x40.svg）
 │  ├─ proposals/         界面方案对比（ui-schemes.html，三套配色/布局）
 │  └─ history/           历史工作日志
-├─ tests/run-tests.js    277 项断言，Node 直接跑，无需浏览器
+├─ tests/run-tests.js    453 项纯函数断言，Node 直接跑，无需浏览器
 ├─ releases/             每次发布的单文件快照（v1.0.0 / v1.4.0 / v1.4.1 / v1.5.0）
 ├─ tools/
 │  ├─ sync-doc.js        文档 ↔ 应用双向同步
@@ -485,6 +490,8 @@ fanc-milling-app/
 │  ├─ release.js         发版：检查 + 快照 + tag（三道闸门）
 │  ├─ shoot-panel.js     重截某个面板的说明书配图
 │  ├─ make-qrcode.py     生成发布链接二维码卡片
+│  ├─ smoke-modules.js   全模块端到端冒烟（137 项，CDP 驱动无头 Edge）
+│  ├─ shoot-bg-variants.js 底色候选对比截图（6 版并排，输出 tmp/bg-compare）
 │  └─ smoke-ai.js        线上 AI 模块冒烟（CDP 驱动无头 Edge）
 └─ .git                  提交 63a00fa（首版）/ v1.4 / v1.5.0
 ```
