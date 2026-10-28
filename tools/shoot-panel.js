@@ -39,6 +39,12 @@ const doGen = args.includes('--gen');
 // 可重复 --click 选择器：切到面板后按顺序点，用来拍"带结果"的画面
 const clicks = [];
 for (let i = 0; i < args.length; i++) if (args[i] === '--click') clicks.push(args[i + 1]);
+// --pre "panel|selector"：截图前先做前置动作，可重复（例：--pre "template|#tpl-list .tpl-item:nth-child(8)"）
+const pres = [];
+for (let i = 0; i < args.length; i++) if (args[i] === '--pre') pres.push(args[i + 1]);
+// --set "selector|value"：进目标面板后先给控件赋值（例：往 #editor 灌一段会报错的程序），可重复
+const sets = [];
+for (let i = 0; i < args.length; i++) if (args[i] === '--set') sets.push(args[i + 1]);
 
 (async () => {
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-shot-'));
@@ -89,13 +95,44 @@ for (let i = 0; i < args.length; i++) if (args[i] === '--click') clicks.push(arg
       await sleep(300);
     }
 
-    const clicked = await send('Runtime.evaluate', {
-      expression: `(()=>{const b=document.querySelector('#nav button[data-p="${panel}"]');
-        if(!b) return 'no-nav'; b.click(); return 'ok';})()`,
-      returnByValue: true,
-    });
-    if (clicked.result?.result?.value !== 'ok') throw new Error('找不到导航项 data-p=' + panel);
+    const navTo = async (p) => {
+      const r = await send('Runtime.evaluate', {
+        expression: `(()=>{const b=document.querySelector('#nav button[data-p="${p}"]');
+          if(!b) return 'no-nav'; b.click(); return 'ok';})()`,
+        returnByValue: true,
+      });
+      if (r.result?.result?.value !== 'ok') throw new Error('找不到导航项 data-p=' + p);
+      await sleep(700);
+    };
+
+    // --pre "panel|selector"：进目标面板之前先做准备动作（例：先载入某个模板再截图校验结果）
+    for (const pre of pres) {
+      const [p, sel] = pre.split('|');
+      if (p) await navTo(p);
+      const r = await send('Runtime.evaluate', {
+        expression: `(()=>{const el=document.querySelector(${JSON.stringify(sel)}); if(!el) return 'no'; el.click(); return 'ok';})()`,
+        returnByValue: true,
+      });
+      if (r.result?.result?.value !== 'ok') throw new Error('--pre 找不到 ' + sel);
+      await sleep(900);
+    }
+
+    await navTo(panel);
     await sleep(900); // 等画布 / 帮助面板懒加载
+
+    // --set 赋值：灌完触发 input，让页面自己的自动保存 / 状态同步跟上
+    for (const s of sets) {
+      const idx = s.indexOf('|');
+      const sel = s.slice(0, idx), val = s.slice(idx + 1);
+      const r = await send('Runtime.evaluate', {
+        expression: `(()=>{const el=document.querySelector(${JSON.stringify(sel)}); if(!el) return 'no';
+          el.value = ${JSON.stringify(val)}; el.dispatchEvent(new Event('input',{bubbles:true}));
+          el.dispatchEvent(new Event('change',{bubbles:true})); return 'ok';})()`,
+        returnByValue: true,
+      });
+      if (r.result?.result?.value !== 'ok') throw new Error('--set 找不到 ' + sel);
+      await sleep(400);
+    }
 
     if (svgPath) {
       await send('DOM.enable');
