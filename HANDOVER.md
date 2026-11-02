@@ -461,7 +461,9 @@ python tools/make-qrcode.py "https://fanuc-milling-w.app.workbuddy.host/?shareco
 | 位图圆角镜像成凹角 | 图元合成 SVG 时 `sweep` 写成了 1，Y 翻转后每个圆弧被镜像，凸 R10 变成向内挖 3mm 的凹角 | 数学逆时针 + Y 翻转 = 屏幕顺时针，`sweep` 必须写 **0**；测试用 CCW/CW 两种输入的图元各验一遍四角圆心是否落在内侧 |
 | 垂直引刀过切一个月牙 | 从轮廓正上方垂直切入时，刀补建立段的终点被偏到「垂直走刀方向」的一侧，而垂直切入的垂直方向正好沿轮廓，等于在起点多切一个刀半径 | 外轮廓改成 25 度斜向引刀、起刀点取最长边中点；引刀点法向 R+2、切向再退 (R+2)/tan25 |
 | 生成慢到像卡死 | 云端模型列表第一个是 `auto` 路由模型，随手 `find(第一个可用)` 就选中它，实测首字 >150 秒（客户端 150s 超时都等不到第一字） | **绝不按列表顺序取模型**：按「已知快的 → flash → turbo/mini/lite → 其余 → auto 垫底」排序，并跳过 video/image/kling/thinking/preview；状态栏显示实际模型名便于对账 |
-| 计时器把生成内容盖回「正在生成...」 | 流式期间外层 `content` 要等 `await` 返回才赋值，500ms 一次的计时刷新读到空字符串就往结果框里写「正在生成...」，把已出的文字盖掉 | onChunk 回调里**同步累加外层变量**，计时器靠它判断该不该写结果框 |
+| 计时器把生成内容盖回「正在生成...」 | 流式期间外层 `content` 要等 `await` 返回才赋值，500ms 一次的计时刷新读到空字符串就往结果框里写「正在生成...」，把已出的字盖掉 | onChunk 回调里**同步累加外层变量**，计时器靠它判断该不该写结果框 |
+| 手动压缩内嵌帮助图 | 当时很爽，下次跑 `sync-doc.js --embed` 又把 `docs/img/*.png` 原样 base64 塞回去，体积反弹 | 要落地必须先改 `sync-doc.js`（第 42–49 行直接读 png 转 base64），让它走压缩 |
+| 想靠瘦身让 GitHub Pages 能打开 | 1.5 MB 压到 1.0 MB，Pages 上仍要 60 秒以上——瓶颈是 15 KB/s 的网络，不是体积 | 体积优化只省流量；托管速度问题只能换托管（Gitee / WorkBuddy） |
 
 ---
 
@@ -502,7 +504,7 @@ fanc-milling-app/
 
 | 项 | 值 |
 |---|---|
-| 远端 | `git@github.com:jfsite/fanc-milling-assistant.git`（**私有**仓库） |
+| 远端 | `git@github.com:jfsite/fanc-milling-assistant.git`（**public**，2026-11-02 起） |
 | 分支 | `main` |
 | 标签 | 每个**已发布**版本一个 `vX.Y.Z`；v1.0.0 ~ v1.9.2 与 v1.12.1、v1.12.2 已推。v1.10.0 ~ v1.12.0 只在本机迭代、从未发布，因此没有 tag |
 | 认证 | 本机 SSH 公钥（`~/.ssh/id_rsa.pub`，已在 GitHub 登记为 `jfsite`） |
@@ -516,8 +518,15 @@ node tools/release.js && git push --tags   # 发版后别忘了推 tag
 
 注意：
 
-- **私有仓库不提供 GitHub Pages**（免费账号只对 public 开放），所以线上入口仍是 WorkBuddy 分享链接；
-  若哪天转 public，先处理 `releases/`（21 MB 快照）与文档里的分享链接/appId。
+- 仓库 2026-11-02 转为 **public**，GitHub Pages 已可用：`https://jfsite.github.io/fanc-milling-assistant/`（`index.html` 转发到 `app.html`，实测 HTTP 200、内容与本地一致）。
+- **Pages 在国内实测约 15 KB/s**：1.5 MB 的 `app.html` 要 100 秒以上，手机浏览器基本等不到。原因见下面这条，所以 Pages 只作源码存档与备用，教学入口仍是 WorkBuddy 分享链接。Pages 上 AI 生成也不可用（云端按 Origin 授权，`github.io` 不在白名单）。
+- 三种 GitHub 分发方式实测（同一个 `app.html`，1,535,594 字节）：
+  | 方式 | 结果 |
+  |---|---|
+  | `jfsite.github.io/...` | 45 秒只下 311 KB |
+  | `raw.githubusercontent.com` | 45 秒只下 277 KB |
+  | `cdn.jsdelivr.net/gh/…@main/app.html` | **8.9 秒下完**，但它对 `.html` 返回 `text/plain`，只能当源码分发，**不能当网站用** |
+- `releases/` 的 29 个快照（约 17 MB）已随仓库公开，克隆会比以前慢。
 - 换机器时只需：登记 SSH 公钥 → `git clone` → 装 Node/Python（跑 tests 与 tools 需要）。
 
 ## 10. 历史档案

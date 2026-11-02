@@ -35,6 +35,9 @@ const outIdx = args.indexOf('--out');
 const out = outIdx > -1 ? args[outIdx + 1] : path.join('docs', 'img', `panel-${panel}.png`);
 const svgIdx = args.indexOf('--svg');
 const svgPath = svgIdx > -1 ? path.resolve(args[svgIdx + 1]) : null;
+// --file 指定要截的 html（默认 app.html），用来对比瘦身版 / 历史快照
+const fileIdx = args.indexOf('--file');
+const pageFile = fileIdx > -1 ? path.resolve(args[fileIdx + 1]) : path.join(ROOT, 'app.html');
 const doGen = args.includes('--gen');
 // 可重复 --click 选择器：切到面板后按顺序点，用来拍"带结果"的画面
 const clicks = [];
@@ -83,7 +86,7 @@ for (let i = 0; i < args.length; i++) if (args[i] === '--set') sets.push(args[i 
     await send('Emulation.setDeviceMetricsOverride', {
       width: 1440, height: 900, deviceScaleFactor: 2, mobile: false,
     });
-    const fileUrl = 'file:///' + path.join(ROOT, 'app.html').replace(/\\/g, '/');
+    const fileUrl = 'file:///' + pageFile.replace(/\\/g, '/');
     await send('Page.navigate', { url: fileUrl });
     // 等导航渲染出来再点：app.html 已 1.4 MB（内嵌 13 张图），固定 2.2s 在慢机器上会抢跑
     await sleep(1200);
